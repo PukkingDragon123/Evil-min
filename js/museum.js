@@ -125,17 +125,16 @@
     for (let i = 0; i < staff.length; i++) {
       const e = staff[i]; e.bob += dt / 1000 * 6;
       if (e.role === 'janitor') {
-        // find nearest trash
-        if (e.target < 0 || e.target >= trash.length) { e.target = nearestTrash(e, trash); }
-        if (e.target >= 0 && trash[e.target]) {
-          e.tx = trash[e.target].x; e.ty = trash[e.target].y;
+        // recompute nearest litter every frame (the trash array mutates as it
+        // is cleaned, so caching an index would go stale and sweep the wrong tile)
+        const idx = nearestTrash(e, trash);
+        if (idx >= 0) {
+          e.tx = trash[idx].x; e.ty = trash[idx].y;
           if (moveTo(e, dt)) {
-            // sweep it up
-            const idx = e.target;
-            if (window.FX) window.FX.dust(trash[idx].x, trash[idx].y, window.Assets.C.dkgray2, 5);
+            const tx = trash[idx].x, ty = trash[idx].y;
+            if (window.FX) window.FX.dust(tx, ty, window.Assets.C.dkgray2, 5);
             S.removeTrash(idx);
             if (window.Quests) window.Quests.emit('trash');
-            e.target = -1;
           }
         } else {
           if (e.pause > 0) { e.pause -= dt; } else if (moveTo(e, dt)) { e.pause = 500 + Math.random() * 1200; const p = randInFloor(); e.tx = p.x; e.ty = p.y; }

@@ -173,8 +173,8 @@
     panel(ctx, 4, fy, 148, 24, 'rgba(27,25,48,0.85)');
     const unlocked = []; for (let i = 0; i < st.floors.length; i++) if (st.floors[i].unlocked) unlocked.push(i);
     const pos = unlocked.indexOf(st.floor);
-    button(ctx, 6, fy + 2, 12, 10, '<', { color: C.steel, enabled: pos > 0 }, function () { S.setFloor(unlocked[pos - 1]); Au.play('tab'); });
-    button(ctx, 138, fy + 2, 12, 10, '>', { color: C.steel, enabled: pos < unlocked.length - 1 }, function () { S.setFloor(unlocked[pos + 1]); Au.play('tab'); });
+    button(ctx, 6, fy + 2, 12, 10, '<', { color: C.steel, enabled: pos > 0 }, function () { S.setFloor(unlocked[pos - 1]); app.selectedItem = -1; Au.play('tab'); });
+    button(ctx, 138, fy + 2, 12, 10, '>', { color: C.steel, enabled: pos < unlocked.length - 1 }, function () { S.setFloor(unlocked[pos + 1]); app.selectedItem = -1; Au.play('tab'); });
     Font.drawText(ctx, D.FLOORS[st.floor].name, 78, fy + 3, C.white, { align: 1, shadow: C.ink });
     const firstLocked = st.floors.findIndex(function (f) { return !f.unlocked; });
     if (firstLocked >= 0) {
@@ -402,11 +402,13 @@
 
     const canM = S.canMount(f.id);
     button(ctx, x + w - 60, y + 6, 56, h - 12, canM ? 'MOUNT!' : 'DIG MORE', { color: canM ? C.green : C.dkgray2, enabled: canM }, function () {
+      // find a spot BEFORE consuming progress so a full floor never wastes a fossil
+      const cell = S.findFreeCell(f.id);
+      if (!cell) { Au.play('error'); toast('No floor space - free a spot or buy a floor!', C.salmon); return; }
       if (S.mount(f.id)) {
         emit('mount');
-        const cell = S.findFreeCell(f.id);
-        if (cell) { S.placeItem(f.id, cell.cx, cell.cy); Au.play('complete'); S.addXp(30 + rc.stars * 20); toast(f.name + ' mounted! ' + stars(rc), rc.color); app.closeModal(); app.setTab('museum'); app.celebrate(f.id); }
-        else { Au.play('complete'); toast('Mounted (no floor space!)', C.orange); }
+        S.placeItem(f.id, cell.cx, cell.cy); Au.play('complete'); S.addXp(30 + rc.stars * 20);
+        toast(f.name + ' mounted! ' + stars(rc), rc.color); app.closeModal(); app.setTab('museum'); app.celebrate(f.id);
       }
     });
   }

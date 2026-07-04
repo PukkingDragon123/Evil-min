@@ -72,8 +72,12 @@
       if (!Array.isArray(state.floors) || !state.floors.length) state.floors = makeFloors();
       // ensure floor count matches data (in case FLOORS grew)
       while (state.floors.length < D.FLOORS.length) state.floors.push({ unlocked: false, museum: [], trash: [] });
-      state.floors.forEach(function (f) { f.museum = f.museum || []; f.trash = f.trash || []; });
-      if (typeof state.floor !== 'number' || state.floor >= state.floors.length) state.floor = 0;
+      state.floors = state.floors.map(function (f) {
+        if (!f || typeof f !== 'object') f = { unlocked: false, museum: [], trash: [] };
+        f.museum = Array.isArray(f.museum) ? f.museum : []; f.trash = Array.isArray(f.trash) ? f.trash : [];
+        return f;
+      });
+      if (typeof state.floor !== 'number' || !Number.isInteger(state.floor) || state.floor < 0 || state.floor >= state.floors.length) state.floor = 0;
       state.staff = Object.assign({ janitor: 0, guide: 0, curator: 0 }, state.staff || {});
       state.quests = state.quests || { progress: {}, done: {} };
       state.quests.progress = state.quests.progress || {}; state.quests.done = state.quests.done || {};

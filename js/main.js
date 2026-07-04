@@ -144,7 +144,7 @@
       if (res.extracted) { Au.play('find'); FX.shake(220, 3); extract(res.extracted.node, true, wx, wy, cell); }
       else { Au.play('error'); FX.dust(wx, wy, biome.dust, 4); UI.toast('Nothing there... (a wasted dig)', C().gray); }
     }
-    if (Dig.isCleared(b)) { UI.toast('Level cleared! Dig DEEPER for rarer finds.', C().lime, window.Assets.icons.pick); S.addXp(20); Au.play('levelup'); FX.confetti(VW / 2, R.CONTENT.y + 60, 26); }
+    if (Dig.isCleared(b) && !b.rewarded) { b.rewarded = true; UI.toast('Level cleared! Dig DEEPER for rarer finds.', C().lime, window.Assets.icons.pick); S.addXp(20); Au.play('levelup'); FX.confetti(VW / 2, R.CONTENT.y + 60, 26); }
     S.saveSoon();
   }
   function pushDigAnim(x, y) { app.digAnims.push({ x: x, y: y, life: 0, ttl: 520 }); }
