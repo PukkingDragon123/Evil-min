@@ -1343,6 +1343,62 @@
     return { right: out, left: [flipped(out[0]), flipped(out[1])] };
   }
 
+  // Tiny procedural collectible sprite, selected by `form`. cols=[main,dark,accent].
+  function curioSprite(form, cols) {
+    const c1 = cols[0], c2 = cols[1], c3 = cols[2];
+    const p = painter(12, 12);
+    if (form === 'spiral') {
+      p.disc(6, 6, 5, c1); p.ring(6, 6, 5, c2); p.ring(6, 6, 3, c1); p.ring(6, 6, 2, c2); p.px(6, 6, c2); p.px(3, 3, c3);
+    } else if (form === 'segmented') {
+      for (let y = 2; y < 10; y++) { const w = Math.round(4 - Math.abs(y - 6) * 0.4); p.rect(6 - w, y, w * 2, 1, (y % 2) ? c1 : c2); }
+      p.rect(3, 3, 6, 1, c2); p.rect(3, 6, 6, 1, c2);
+      p.px(2, 4, c2); p.px(9, 4, c2); p.px(2, 7, c2); p.px(9, 7, c2);
+      p.px(5, 3, c3); p.px(7, 3, c3);
+    } else if (form === 'leaf') {
+      for (let y = 2; y < 11; y++) { const w = Math.round(Math.sin((11 - y) / 10 * Math.PI) * 4); for (let dx = 1; dx <= w; dx++) { p.px(6 - dx, y, dx === w ? c2 : c1); p.px(6 + dx, y, dx === w ? c2 : c1); } }
+      for (let y = 2; y < 11; y++) p.px(6, y, c2); p.px(6, 1, c3);
+    } else if (form === 'shard') {
+      p.rect(2, 4, 8, 5, c1); p.px(1, 5, c1); p.px(10, 6, c1); p.rect(2, 4, 8, 1, c3);
+      p.px(3, 6, c2); p.px(6, 7, c2); p.px(8, 5, c2); p.line(2, 8, 9, 8, c2);
+    } else if (form === 'point') {
+      for (let y = 1; y < 9; y++) { const w = Math.round(y * 0.5); p.rect(6 - w, y, w * 2 + 1, 1, y < 3 ? c3 : c1); }
+      p.px(6, 1, c3); p.rect(5, 9, 2, 2, c2);
+    } else if (form === 'blob') {
+      p.disc(6, 6, 4, c1); p.ring(6, 6, 4, c2); p.px(4, 4, c3); p.px(8, 7, c2); p.px(5, 8, c2);
+    } else if (form === 'egg') {
+      for (let y = 1; y < 11; y++) { const w = Math.round(Math.sin(y / 11 * Math.PI) * 3.5); p.rect(6 - w, y, Math.max(1, w * 2), 1, c1); } p.px(5, 3, c3); p.px(7, 7, c2);
+    } else if (form === 'bug') {
+      p.disc(6, 8, 2, c1); p.rect(5, 3, 2, 5, c2);
+      p.line(6, 4, 2, 2, c3); p.line(6, 4, 10, 2, c3); p.line(6, 6, 2, 8, c3); p.line(6, 6, 10, 8, c3);
+      p.px(5, 3, c1); p.px(7, 3, c1);
+    } else if (form === 'stick') {
+      for (let y = 1; y < 11; y++) p.rect(5, y, 2, 1, (y % 2) ? c1 : c2); p.px(5, 1, c3); p.px(6, 1, c3); p.px(4, 4, c2); p.px(7, 7, c2);
+    } else if (form === 'disc') {
+      p.disc(6, 6, 4, c1); p.ring(6, 6, 4, c2); for (let a = 0; a < 8; a++) { const t = a / 8 * Math.PI * 2; p.px(6 + Math.round(Math.cos(t) * 2), 6 + Math.round(Math.sin(t) * 2), c2); } p.px(4, 4, c3);
+    } else { p.disc(6, 6, 4, c1); p.ring(6, 6, 4, c2); }
+    return p.canvas;
+  }
+
+  function shelfSprite() {
+    const p = painter(16, 20);
+    p.rect(2, 4, 12, 14, C.brown); p.rect(2, 4, 12, 1, C.ltbrown); p.rect(2, 17, 12, 1, C.maroon);
+    p.rect(3, 9, 10, 1, C.ltbrown); p.rect(3, 13, 10, 1, C.ltbrown);
+    p.px(4, 7, C.tan); p.px(6, 7, C.cyan); p.px(9, 7, C.lime); p.px(11, 7, C.orange);
+    p.px(5, 11, C.pink); p.px(8, 11, C.yellow); p.px(11, 11, C.steel);
+    p.px(4, 15, C.lime); p.px(7, 15, C.orange); p.px(10, 15, C.cyan);
+    p.g.globalAlpha = 0.22; p.rect(3, 5, 3, 12, C.white); p.g.globalAlpha = 1;
+    return p.canvas;
+  }
+  function cabinetSprite() {
+    const p = painter(30, 18);
+    p.rect(1, 2, 28, 15, C.brown); p.rect(1, 2, 28, 1, C.gold); p.rect(1, 16, 28, 1, C.maroon);
+    p.rect(2, 7, 26, 1, C.ltbrown); p.rect(2, 12, 26, 1, C.ltbrown);
+    const cc = [C.tan, C.cyan, C.lime, C.orange, C.pink, C.yellow, C.steel, C.salmon];
+    for (let r = 0; r < 3; r++) for (let i = 0; i < 8; i++) p.px(3 + i * 3, 5 + r * 5, cc[(r * 3 + i) % cc.length]);
+    p.g.globalAlpha = 0.2; p.rect(2, 3, 4, 13, C.white); p.g.globalAlpha = 1;
+    return p.canvas;
+  }
+
   function trashSprites() {
     const cup = sprite(['.RRRR.', 'RWWWWR', '.RRRR.', '.RRRR.', '.RRRR.', '..RR..'], { R: C.red, W: C.white });
     const paper = sprite(['.WW.W.', 'WWWWWW', 'WLWWLW', 'WWWWWW', '.WWWW.'], { W: C.pale, L: C.ltgray });
@@ -1528,7 +1584,15 @@
       cafe: cafeSprite(),
       theater: theaterSprite(),
       kiosk: kioskSprite(),
+      shelf: shelfSprite(),
+      cabinet: cabinetSprite(),
     };
+
+    // procedural curio specimens
+    A.curios = {};
+    if (window.GameData && window.GameData.CURIOS) {
+      window.GameData.CURIOS.forEach(function (c) { A.curios[c.id] = curioSprite(c.form, c.colors); });
+    }
 
     A.shadows = {
       s10: shadowSprite(10),

@@ -250,7 +250,7 @@
     ctx.globalAlpha = 1;
   }
 
-  function drawDigTile(ctx, cell, px, py, ts, biome, t, hover, mode) {
+  function drawDigTile(ctx, cell, px, py, ts, biome, t, hover) {
     if (!cell.revealed) {
       // raised soil mound
       ctx.fillStyle = hover ? shade(biome.tileHi, 1.08) : biome.tileHi;
@@ -263,16 +263,6 @@
       ctx.fillStyle = biome.soil[2];
       for (let i = 0; i < 3; i++) ctx.fillRect(px + 3 + (r() * (ts - 6) | 0), py + 3 + (r() * (ts - 6) | 0), 1, 1);
       if (r() > 0.7) { ctx.fillStyle = biome.crack; ctx.globalAlpha = 0.5; ctx.fillRect(px + (ts >> 1), py + 3, 1, ts - 6); ctx.globalAlpha = 1; }
-      if (cell.flagged) {
-        blit(ctx, A.icons.flag, px + ts / 2, py + ts / 2, ts - 5);
-        ctx.strokeStyle = biome.accent; ctx.lineWidth = 1; ctx.globalAlpha = 0.8;
-        ctx.strokeRect(px + 1.5, py + 1.5, ts - 3, ts - 3); ctx.globalAlpha = 1;
-      }
-      if (hover && mode === 'excavate' && !cell.flagged) {
-        // targeting reticle
-        ctx.strokeStyle = biome.accent; ctx.lineWidth = 1;
-        ctx.strokeRect(px + 2.5, py + 2.5, ts - 5, ts - 5);
-      }
       return;
     }
     // revealed sunken pit
@@ -303,13 +293,15 @@
       blit(ctx, A.ores[ore ? ore.sprite : 'copper'], cx, cy, dim);
     } else if (node.type === 'gem') {
       blit(ctx, A.icons.gem, cx, cy, dim);
+    } else if (node.type === 'curio') {
+      blit(ctx, A.curios[node.curioId] || A.pieces.skull, cx, cy, dim);
     } else {
       // fossil: little skull
       blit(ctx, A.pieces.skull, cx, cy, dim);
     }
   }
 
-  function drawDig(ctx, t, site, board, cursor, mode, anims) {
+  function drawDig(ctx, t, site, board, cursor, hold, anims) {
     const biome = D.BIOMES[site.biome] || D.BIOMES.temperate;
     drawDigBackground(ctx, biome);
     const L = computeDigLayout(site, board);
@@ -322,7 +314,7 @@
       const cell = board.cells[y * L.cols + x];
       const px = L.bx + x * ts, py = L.by + y * ts;
       const hover = cursor && cursor.x === x && cursor.y === y;
-      drawDigTile(ctx, cell, px, py, ts, biome, t, hover, mode);
+      drawDigTile(ctx, cell, px, py, ts, biome, t, hover);
     }
 
     // dig-team animations
@@ -338,12 +330,23 @@
     // cursor highlight
     if (cursor) {
       const px = L.bx + cursor.x * ts, py = L.by + cursor.y * ts;
-      ctx.strokeStyle = mode === 'excavate' ? biome.accent : C.white;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = C.white; ctx.lineWidth = 1;
       const pulse = Math.sin(t / 150) * 0.5 + 0.5;
       ctx.globalAlpha = 0.4 + pulse * 0.5;
       ctx.strokeRect(px + 0.5, py + 0.5, ts - 1, ts - 1);
       ctx.globalAlpha = 1;
+    }
+
+    // hold-to-dig charge ring
+    if (hold) {
+      const cx = L.bx + hold.x * ts + ts / 2, cy = L.by + hold.y * ts + ts / 2;
+      const rad = ts * 0.42;
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = biome.accent; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * hold.p); ctx.stroke();
+      // little digger icon appears as it charges
+      blit(ctx, A.dig.digger[(t / 120 | 0) % 2], cx, cy - 1, ts - 4, 1);
     }
     return L;
   }

@@ -10,8 +10,8 @@
   // advance: the emit() event type that completes the step (or null = manual).
   const STEPS = [
     { text: "Howdy, curator! I'm Doc. Let's dig up your first fossil - tap the DIG SITE tab down below!", highlight: 'tabDig', advance: 'tabDig' },
-    { text: "The numbers show how many treasures are buried nearby. Tap a tile to SURVEY it for clues.", highlight: 'board', advance: 'survey' },
-    { text: "Once you've sniffed one out, flip to EXCAVATE mode and send a dig team to pull it out clean!", highlight: 'digMode', advance: 'extract' },
+    { text: "The numbers show how many treasures hide nearby. TAP a tile to SURVEY it for clues.", highlight: 'board', advance: 'survey' },
+    { text: "Found one? Press and HOLD a tile to send a dig team and pull the treasure out clean!", highlight: 'board', advance: 'extract' },
     { text: "That fossil block went to your STORAGE. Tap the STORAGE tab to go pack it.", highlight: 'tabStorage', advance: 'tabStorage' },
     { text: "Drop the block into the grid. Fill a whole row or column and it clears - banking the fossil!", highlight: 'board', advance: 'clearLine' },
     { text: "Bank enough of one dino, then open MUSEUM and hit FOSSILS to MOUNT its skeleton.", highlight: 'tabMuseum', advance: 'mount' },

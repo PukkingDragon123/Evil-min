@@ -79,9 +79,20 @@
     return { type: 'fossil', fossilId: fid, rarity: f.rarity, shape: shape, cells: cells };
   }
 
+  function pickCurio(site) {
+    const weights = D.CURIO_BIOME[site.biome] || { bug: 1, plant: 1, artifact: 1 };
+    const cat = D.weightedKey(weights);
+    const pool = D.CURIOS.filter(function (c) { return c.cat === cat; });
+    if (!pool.length) return D.CURIOS[0].id;
+    return pool[ri(pool.length)].id;
+  }
+
   function makeNode(site, depth) {
     if (rnd() < (site.gemRate || 0.1)) {
       return { type: 'gem', amount: 1 + ri(1 + Math.floor(depth / 3)) };
+    }
+    if (rnd() < D.CURIO_RATE) {
+      return { type: 'curio', curioId: pickCurio(site) };
     }
     if (rnd() < 0.34) {
       return { type: 'ore', oreId: D.weightedKey(site.ores) };

@@ -27,12 +27,12 @@
   // APP STATE
   // =========================================================================
   const app = {
-    tab: 'museum', siteId: 'quarry', digMode: 'survey',
+    tab: 'museum', siteId: 'quarry',
     editMode: false, placement: null, selectedItem: -1,
     modal: null, scrollY: 0, scrollMax: 0, scrollRegion: null,
-    shopCat: 'nature', activePiece: 0,
+    shopCat: 'nature', activePiece: 0, collTab: 'fossils',
     invGhost: null, invLayout: null, digCursor: null, digLayout: null,
-    digAnims: [], offlineData: null,
+    hold: null, digAnims: [], offlineData: null,
 
     setTab: function (id) { this.tab = id; this.editMode = false; this.selectedItem = -1; if (id !== 'museum' && this.placement) this.cancelPlacement(); if (id === 'storage') this.activePiece = Math.min(this.activePiece, Math.max(0, S.get().queue.length - 1)); emit('tab' + id.charAt(0).toUpperCase() + id.slice(1)); },
     openModal: function (n) { this.modal = n; this.scrollY = 0; },
@@ -51,7 +51,7 @@
       else {
         if (!S.spend(p.cost, p.gems)) { Au.play('error'); UI.toast('Cannot afford', C().salmon); this.placement = null; return; }
         S.placeItem(p.id, cx, cy); S.get().owned[p.id] = (S.get().owned[p.id] || 0) + 1; Au.play('place'); S.addXp(6); UI.toast(UI.displayName(p.id) + ' placed!', C().lime);
-        const cat = D.catalogById(p.id); if (cat) emit(cat.kind === 'facility' ? 'facility' : 'deco');
+        const cat = D.catalogById(p.id); if (cat) { emit(cat.kind === 'facility' ? 'facility' : 'deco'); if (cat.shelf) emit('shelf'); }
       }
       this.placement = null; S.saveSoon();
     },
@@ -75,26 +75,26 @@
   // INPUT
   // =========================================================================
   function toLogical(cx, cy) { const r = canvas.getBoundingClientRect(); return { x: (cx - r.left) / r.width * VW, y: (cy - r.top) / r.height * VH }; }
-  let pointerDown = false, downPos = null, moved = false, longPressTimer = null, longPressFired = false, scrollDragging = false, lastPointer = { x: 0, y: 0 };
+  let pointerDown = false, downPos = null, moved = false, scrollDragging = false, lastPointer = { x: 0, y: 0 };
+  const HOLD_MS = 340; // hold this long on a dig tile to send a dig team
 
   function onDown(x, y) {
-    Au.resume(); pointerDown = true; downPos = { x: x, y: y }; lastPointer = { x: x, y: y }; moved = false; longPressFired = false;
+    Au.resume(); pointerDown = true; downPos = { x: x, y: y }; lastPointer = { x: x, y: y }; moved = false;
+    app.hold = null;
     if (app.modal && app.scrollRegion && inRect(x, y, app.scrollRegion)) scrollDragging = true;
-    // long-press to flag on the dig board
+    // press-and-hold a dig tile to send an excavation team
     if (app.tab === 'dig' && !app.modal && app.digLayout) {
       const cell = R.screenToDigCell(app.digLayout, x, y);
       if (cell) {
-        longPressTimer = setTimeout(function () {
-          longPressFired = true;
-          const site = D.siteById(app.siteId); const b = Dig.getBoard(site);
-          if (!b.cells[cell.y * b.cols + cell.x].revealed) { const on = Dig.toggleFlag(b, cell.x, cell.y); Au.play(on ? 'flag' : 'unflag'); }
-        }, 320);
+        const b = Dig.getBoard(D.siteById(app.siteId));
+        const c = b.cells[cell.y * b.cols + cell.x];
+        if (!c.revealed && !c.extracted) app.hold = { x: cell.x, y: cell.y, elapsed: 0, done: false };
       }
     }
   }
   function onMove(x, y) {
     if (!pointerDown) { updateHover(x, y); return; }
-    if (Math.abs(x - downPos.x) > 3 || Math.abs(y - downPos.y) > 3) { moved = true; if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } }
+    if (Math.abs(x - downPos.x) > 3 || Math.abs(y - downPos.y) > 3) { moved = true; app.hold = null; }
     if (scrollDragging) app.scrollY = Math.max(0, Math.min(app.scrollMax, app.scrollY - (y - lastPointer.y)));
     lastPointer = { x: x, y: y };
     updateHover(x, y);
@@ -107,43 +107,51 @@
     else if (app.tab === 'museum' && app.placement) { const cell = R.screenToMuseumCell(x, y); if (cell) { const fp = S.itemFootprint(app.placement.id); app.placement.cx = Math.max(0, Math.min(S.MW - fp.w, cell.cx)); app.placement.cy = Math.max(0, Math.min(S.MH - fp.h, cell.cy)); app.updateGhostValid(); } }
   }
   function onUp(x, y) {
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     pointerDown = false; scrollDragging = false;
-    if (longPressFired || moved) return;
+    const held = app.hold; app.hold = null;
+    if (moved) return;
+    if (held && held.done) return;      // the hold already sent a dig team
     if (UI.handleTap(x, y)) return;
     if (app.modal) return;
-    if (app.tab === 'dig') handleDigTap(x, y);
+    if (app.tab === 'dig') { if (held) handleDigSurvey(held.x, held.y); }  // quick tap = survey
     else if (app.tab === 'storage') handleStorageTap(x, y);
     else if (app.tab === 'museum') handleMuseumTap(x, y);
   }
   function inRect(x, y, r) { return x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h; }
 
   // --- dig -----------------------------------------------------------------
-  function handleDigTap(x, y) {
-    const st = S.get(); const site = D.siteById(app.siteId); const L = app.digLayout; if (!L) return;
-    const cell = R.screenToDigCell(L, x, y); if (!cell) return;
-    const b = Dig.getBoard(site);
-    const c = b.cells[cell.y * b.cols + cell.x];
-    if (c.revealed || c.extracted) return;
-    const wx = L.bx + cell.x * L.ts + L.ts / 2, wy = L.by + cell.y * L.ts + L.ts / 2;
-    const biome = D.BIOMES[site.biome];
+  function cellWorld(L, cx, cy) { return { x: L.bx + cx * L.ts + L.ts / 2, y: L.by + cy * L.ts + L.ts / 2 }; }
 
-    if (app.digMode === 'survey') {
-      if (c.flagged) { UI.toast('Flagged - use EXCAVATE to dig it', C().pale); return; }
-      if (st.energy < 1) { Au.play('error'); UI.toast('Out of energy', C().salmon); return; }
-      S.useEnergy(1); st.stats.digs++; emit('survey');
-      const res = Dig.survey(b, site, cell.x, cell.y);
-      Au.play('dig'); FX.dust(wx, wy, biome.dust, 6);
-      if (res.hit) { extract(res.hit.node, res.hit.pristine, wx, wy, cell); }
-      else { Au.play('reveal'); if (res.cascade > 2) FX.dust(wx, wy, biome.dust, 4); }
-    } else { // excavate
-      if (st.energy < 2) { Au.play('error'); UI.toast('Need 2 energy to send a team', C().salmon); return; }
-      S.useEnergy(2); st.stats.digs++;
-      pushDigAnim(cell.x, cell.y);
-      const res = Dig.excavate(b, site, cell.x, cell.y);
-      if (res.extracted) { Au.play('find'); FX.shake(220, 3); extract(res.extracted.node, true, wx, wy, cell); }
-      else { Au.play('error'); FX.dust(wx, wy, biome.dust, 4); UI.toast('Nothing there... (a wasted dig)', C().gray); }
-    }
+  // quick tap = survey (reveal clues)
+  function handleDigSurvey(cx, cy) {
+    const st = S.get(); const site = D.siteById(app.siteId); const L = app.digLayout; if (!L) return;
+    const b = Dig.getBoard(site); const c = b.cells[cy * b.cols + cx];
+    if (!c || c.revealed || c.extracted) return;
+    if (st.energy < 1) { Au.play('error'); UI.toast('Out of energy - refill or wait', C().salmon); return; }
+    const w = cellWorld(L, cx, cy); const biome = D.BIOMES[site.biome];
+    S.useEnergy(1); st.stats.digs++; emit('survey');
+    const res = Dig.survey(b, site, cx, cy);
+    Au.play('dig'); FX.dust(w.x, w.y, biome.dust, 6);
+    if (res.hit) { extract(res.hit.node, res.hit.pristine, w.x, w.y, { x: cx, y: cy }); }
+    else { Au.play('reveal'); if (res.cascade > 2) FX.dust(w.x, w.y, biome.dust, 4); }
+    afterDig(b);
+  }
+
+  // press-and-hold (or right-click) = send a dig team to excavate
+  function handleDigExcavate(cx, cy) {
+    const st = S.get(); const site = D.siteById(app.siteId); const L = app.digLayout; if (!L) return;
+    const b = Dig.getBoard(site); const c = b.cells[cy * b.cols + cx];
+    if (!c || c.revealed || c.extracted) return;
+    if (st.energy < 2) { Au.play('error'); UI.toast('Need 2 energy to send a dig team', C().salmon); return; }
+    const w = cellWorld(L, cx, cy); const biome = D.BIOMES[site.biome];
+    S.useEnergy(2); st.stats.digs++; pushDigAnim(cx, cy);
+    const res = Dig.excavate(b, site, cx, cy);
+    if (res.extracted) { Au.play('find'); FX.shake(220, 3); extract(res.extracted.node, true, w.x, w.y, { x: cx, y: cy }); }
+    else { Au.play('error'); FX.dust(w.x, w.y, biome.dust, 4); UI.toast('Nothing there... (a wasted dig)', C().gray); }
+    afterDig(b);
+  }
+
+  function afterDig(b) {
     if (Dig.isCleared(b) && !b.rewarded) { b.rewarded = true; UI.toast('Level cleared! Dig DEEPER for rarer finds.', C().lime, window.Assets.icons.pick); S.addXp(20); Au.play('levelup'); FX.confetti(VW / 2, R.CONTENT.y + 60, 26); }
     S.saveSoon();
   }
@@ -178,6 +186,13 @@
       const amt = Math.max(1, Math.floor(node.amount * (pristine ? 1 : 0.5)));
       S.addGems(amt); Au.play('ore'); FX.floatText(wx, wy - 6, '+' + amt + ' gem', C().cyan); S.addXp(4);
       UI.toast('+' + amt + ' gem' + (amt > 1 ? 's' : '') + '!', C().cyan, window.Assets.icons.gem);
+    } else if (node.type === 'curio') {
+      const cu = D.curioById(node.curioId); const rc = D.RARITY[cu.rarity];
+      const first = S.addCurio(node.curioId);
+      st_extracted(); Au.play('find'); S.addXp(first ? 8 : 2);
+      FX.floatText(wx, wy - 6, cu.name, rc.color); FX.burst(wx, wy, rc.glow, 8);
+      emit('curio'); emit('curioUnique', S.uniqueCurios());
+      UI.toast((first ? 'NEW specimen: ' : 'Found ') + cu.name + (first ? '!' : ' (dupe)'), rc.color, window.Assets.curios[node.curioId]);
     }
   }
   function st_extracted() { S.get().stats.extracted++; }
@@ -240,9 +255,10 @@
   window.addEventListener('mouseup', function (e) { if (e.button !== 0) return; const p = toLogical(e.clientX, e.clientY); onUp(p.x, p.y); });
   canvas.addEventListener('contextmenu', function (e) {
     e.preventDefault(); const p = toLogical(e.clientX, e.clientY);
+    // right-click = quick "send a dig team" (excavate) on desktop
     if (app.tab === 'dig' && !app.modal && app.digLayout) {
       const cell = R.screenToDigCell(app.digLayout, p.x, p.y);
-      if (cell) { const site = D.siteById(app.siteId); const b = Dig.getBoard(site); if (!b.cells[cell.y * b.cols + cell.x].revealed) { const on = Dig.toggleFlag(b, cell.x, cell.y); Au.play(on ? 'flag' : 'unflag'); } }
+      if (cell) { app.hold = null; handleDigExcavate(cell.x, cell.y); }
     }
   });
   canvas.addEventListener('touchstart', function (e) { e.preventDefault(); const t = e.changedTouches[0]; const p = toLogical(t.clientX, t.clientY); onDown(p.x, p.y); }, { passive: false });
@@ -284,6 +300,12 @@
     visitorEmit += dt;
     if (visitorEmit > 1000) { visitorEmit = 0; emit('visitors', S.computeStats().visitors); }
 
+    // press-and-hold on a dig tile charges up, then sends a dig team
+    if (pointerDown && app.hold && !app.hold.done && app.tab === 'dig' && !app.modal) {
+      app.hold.elapsed += dt;
+      if (app.hold.elapsed >= HOLD_MS) { app.hold.done = true; handleDigExcavate(app.hold.x, app.hold.y); }
+    }
+
     const lvl = S.get().level;
     if (lvl > levelWatch) { levelWatch = lvl; Au.play('levelup'); UI.toast('Level up! Now level ' + lvl, C().gold, window.Assets.icons.gem); FX.confetti(VW / 2, R.HUD_H + 20, 30); }
 
@@ -297,7 +319,8 @@
     else if (app.tab === 'dig') {
       const site = D.siteById(app.siteId); const b = Dig.getBoard(site);
       if (!app.modal) spawnAmbient(dt, site);
-      app.digLayout = R.drawDig(ctx, now, site, b, app.digCursor, app.digMode, app.digAnims);
+      const holdInfo = (app.hold && !app.hold.done && pointerDown) ? { x: app.hold.x, y: app.hold.y, p: Math.min(1, app.hold.elapsed / HOLD_MS) } : null;
+      app.digLayout = R.drawDig(ctx, now, site, b, app.digCursor, holdInfo, app.digAnims);
       FX.draw(ctx);
     } else if (app.tab === 'storage') { R.drawInventory(ctx, now, app); FX.draw(ctx); }
     else if (app.tab === 'shop') UI.drawShop(ctx, now, app);

@@ -224,14 +224,7 @@
     Font.drawText(ctx, 'DEPTH ' + depth + '  ' + biome.name, 16, HUD_H + 16, C.pale);
     const left = window.Dig.nodesLeft(board);
     Font.drawText(ctx, 'Treasures left: ' + left, 130, HUD_H + 6, C.yellow);
-    R.blit(ctx, A.icons.flag, 130, HUD_H + 18, 8, 1);
-    Font.drawText(ctx, String(window.Dig.flagCount(board)), 138, HUD_H + 16, C.salmon);
 
-    // mode toggle
-    button(ctx, VW - 154, HUD_H + 5, 66, 8, app.digMode === 'survey' ? 'SURVEY' : 'EXCAVATE',
-      { color: app.digMode === 'survey' ? C.steel : C.orange, active: app.digMode === 'excavate' }, function () {
-        Au.play('click'); app.digMode = app.digMode === 'survey' ? 'excavate' : 'survey';
-      });
     button(ctx, VW - 52, HUD_H + 5, 46, 8, 'SITES', { color: C.purple }, function () { Au.play('click'); app.openModal('sites'); });
 
     if (window.Dig.isCleared(board)) {
@@ -239,7 +232,9 @@
         const d = window.Dig.descend(site); Au.play('newarea'); emit('depth', d); FX.confetti(VW / 2, HUD_H + 40, 30); toast('Descending to depth ' + d + '!', C.lime);
       });
     } else {
-      Font.drawText(ctx, app.digMode === 'survey' ? 'Tap: survey (reveals clues)' : 'Tap: send dig team (hold=flag)', VW - 154, HUD_H + 16, C.gray);
+      // the little guide for the tap/hold controls
+      R.blit(ctx, A.icons.pick, 132, HUD_H + 18, 8, 1);
+      Font.drawText(ctx, 'TAP tile = survey     HOLD tile = send dig team', 140, HUD_H + 16, C.pale);
     }
 
     if (S.get().energy <= 0) {
@@ -336,7 +331,7 @@
       Font.drawText(ctx, item.name, x + 44, y + 4, C.white, { shadow: C.ink });
       Font.drawTextWrapped(ctx, item.desc, x + 44, y + 13, cwid - 48, C.ltgray);
       let ben = [];
-      if (item.wonder) ben.push('+' + item.wonder + '★'); if (item.income) ben.push('+' + item.income + '/s'); if (item.comfort) ben.push('+' + item.comfort + '♥');
+      if (item.shelf) ben.push('★ per specimen'); if (item.wonder) ben.push('+' + item.wonder + '★'); if (item.income) ben.push('+' + item.income + '/s'); if (item.comfort) ben.push('+' + item.comfort + '♥');
       Font.drawText(ctx, ben.join(' '), x + 44, y + ch - 17, C.lime);
       costLabel(ctx, x + 44, y + ch - 9, cost, item.gems || 0, afford);
       if (owned > 0) Font.drawText(ctx, 'x' + owned, x + cwid - 4, y + 4, C.gold, { align: 2 });
@@ -371,16 +366,48 @@
 
   function drawCollection(ctx, t, app) {
     modalBackdrop(ctx, app);
-    const w = 430, h = 220, x = (VW - w) / 2, y = (VH - h) / 2;
+    const w = 430, h = 224, x = (VW - w) / 2, y = (VH - h) / 2;
     panel(ctx, x, y, w, h, '#232038', C.gold);
-    Font.drawText(ctx, 'FOSSIL COLLECTION', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
+    const curios = app.collTab === 'curios';
+    Font.drawText(ctx, curios ? 'SPECIMEN COLLECTION' : 'FOSSIL COLLECTION', x + w / 2, y + 5, C.cyan, { align: 1, scale: 2, shadow: C.ink });
     button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
-    const vx = x + 6, vy = y + 22, vw = w - 14, vh = h - 28;
+    // tabs
+    button(ctx, x + 6, y + 20, 100, 11, 'SKELETONS', { color: !curios ? C.purple : C.dkgray2, active: !curios }, function () { app.collTab = 'fossils'; app.scrollY = 0; Au.play('tab'); });
+    button(ctx, x + 110, y + 20, 100, 11, 'SPECIMENS', { color: curios ? C.teal : C.dkgray2, active: curios }, function () { app.collTab = 'curios'; app.scrollY = 0; Au.play('tab'); });
+    if (curios) Font.drawText(ctx, S.uniqueCurios() + '/' + D.CURIOS.length + ' discovered', x + w - 20, y + 22, C.gold, { align: 2 });
+
+    const vx = x + 6, vy = y + 34, vw = w - 14, vh = h - 40;
     ctx.save(); ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
-    const rowH = 30; let cy = vy - app.scrollY;
-    for (let i = 0; i < D.FOSSILS.length; i++) { drawFossilRow(ctx, D.FOSSILS[i], vx, cy, vw, rowH, app); cy += rowH + 3; }
-    ctx.restore();
-    scrollClip(ctx, app, vx, vy, vw, vh, D.FOSSILS.length * (rowH + 3));
+    if (curios) {
+      const cols = 5, cw = Math.floor(vw / cols), ch = 40; let contentH = Math.ceil(D.CURIOS.length / cols) * ch;
+      for (let i = 0; i < D.CURIOS.length; i++) {
+        const col = i % cols, row = (i / cols) | 0;
+        drawCurioCell(ctx, D.CURIOS[i], vx + col * cw, vy + row * ch - app.scrollY, cw, ch);
+      }
+      ctx.restore();
+      scrollClip(ctx, app, vx, vy, vw, vh, contentH);
+    } else {
+      const rowH = 30; let cy = vy - app.scrollY;
+      for (let i = 0; i < D.FOSSILS.length; i++) { drawFossilRow(ctx, D.FOSSILS[i], vx, cy, vw, rowH, app); cy += rowH + 3; }
+      ctx.restore();
+      scrollClip(ctx, app, vx, vy, vw, vh, D.FOSSILS.length * (rowH + 3));
+    }
+  }
+  function drawCurioCell(ctx, cu, x, y, w, h) {
+    if (y + h < HUD_H || y > VH) return;
+    const count = S.curioCount(cu.id); const found = count > 0; const rc = D.RARITY[cu.rarity];
+    panel(ctx, x + 2, y + 2, w - 4, h - 4, found ? '#2b2740' : '#1c1a2a', found ? rc.color : C.dkgray2);
+    const img = A.curios[cu.id];
+    if (found) {
+      R.blit(ctx, img, x + w / 2, y + 15, 20, 1);
+      Font.drawText(ctx, cu.name.length > 11 ? cu.name.slice(0, 10) + '.' : cu.name, x + w / 2, y + h - 12, C.white, { align: 1 });
+      if (count > 1) Font.drawText(ctx, 'x' + count, x + w - 6, y + 5, C.gold, { align: 2 });
+      Font.drawText(ctx, stars(rc), x + w / 2, y + h - 6, rc.color, { align: 1 });
+    } else {
+      // undiscovered silhouette
+      ctx.globalAlpha = 0.3; R.blit(ctx, img, x + w / 2, y + 15, 20, 1); ctx.globalAlpha = 1;
+      Font.drawText(ctx, '???', x + w / 2, y + h - 12, C.gray, { align: 1 });
+    }
   }
   function drawFossilRow(ctx, f, x, y, w, h, app) {
     if (y + h < HUD_H || y > VH) return;

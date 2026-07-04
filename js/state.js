@@ -23,6 +23,7 @@
     return {
       coins: 150, gems: 3, energy: 24, energyTimer: 0,
       upgrades: {}, grid: makeGrid(6), queue: [], speciesProgress: {}, mounted: {},
+      curios: {},
       owned: {}, sites: { quarry: true }, depth: {}, maxDepth: {}, boards: {},
       floors: makeFloors(), floor: 0,
       staff: { janitor: 0, guide: 0, curator: 0 },
@@ -66,6 +67,7 @@
       state.queue = state.queue || [];
       state.speciesProgress = state.speciesProgress || {};
       state.mounted = state.mounted || {};
+      state.curios = state.curios || {};
       state.owned = state.owned || {};
       state.sites = state.sites || { quarry: true };
       state.depth = state.depth || {}; state.maxDepth = state.maxDepth || {}; state.boards = state.boards || {};
@@ -109,6 +111,11 @@
   function mountThreshold(id) { const f = D.fossilById(id); return f ? D.RARITY[f.rarity].mount : 999; }
   function canMount(id) { return speciesOf(id) >= mountThreshold(id); }
   function mount(id) { if (!canMount(id)) return false; state.speciesProgress[id] -= mountThreshold(id); state.mounted[id] = (state.mounted[id] || 0) + 1; state.stats.mounted++; saveSoon(); return true; }
+
+  // curios (single-piece collectibles)
+  function addCurio(id) { const first = !state.curios[id]; state.curios[id] = (state.curios[id] || 0) + 1; saveSoon(); return first; }
+  function curioCount(id) { return state.curios[id] || 0; }
+  function uniqueCurios() { let n = 0; for (const k in state.curios) if (state.curios[k] > 0) n++; return n; }
 
   // grid
   function gridIdx(x, y) { return y * state.grid.size + x; }
@@ -160,6 +167,7 @@
   // ---- derived stats (across all unlocked floors) ----
   function computeStats() {
     let wonder = 0, income = 0, comfort = 0, exhibits = 0, facilities = 0;
+    const uc = uniqueCurios();
     for (let fi = 0; fi < state.floors.length; fi++) {
       if (!state.floors[fi].unlocked) continue;
       const m = state.floors[fi].museum;
@@ -167,7 +175,11 @@
         const it = m[i]; const fos = D.fossilById(it.id);
         if (fos) { wonder += fossilWonder(fos); income += fos.income; exhibits++; continue; }
         const cat = D.catalogById(it.id);
-        if (cat) { wonder += cat.wonder || 0; income += cat.income || 0; comfort += cat.comfort || 0; if (cat.kind === 'facility') facilities++; }
+        if (cat) {
+          if (cat.shelf) wonder += (cat.base || 0) + uc * (cat.perCurio || 0);
+          else wonder += cat.wonder || 0;
+          income += cat.income || 0; comfort += cat.comfort || 0; if (cat.kind === 'facility') facilities++;
+        }
       }
     }
     comfort += (state.staff.guide || 0) * 12;
@@ -211,6 +223,7 @@
     addCoins: addCoins, addGems: addGems, canAfford: canAfford, spend: spend,
     addXp: addXp, xpForLevel: xpForLevel,
     addSpecies: addSpecies, speciesOf: speciesOf, mountThreshold: mountThreshold, canMount: canMount, mount: mount,
+    addCurio: addCurio, curioCount: curioCount, uniqueCurios: uniqueCurios,
     gridIdx: gridIdx, resizeGrid: resizeGrid,
     queueCap: queueCap, pushBlock: pushBlock, removeQueue: removeQueue,
     curFloor: curFloor, curMuseum: curMuseum, curTrash: curTrash, floorUnlocked: floorUnlocked, buyFloor: buyFloor, setFloor: setFloor,

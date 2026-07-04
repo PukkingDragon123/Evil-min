@@ -179,6 +179,8 @@
     { id: 'sign',     name: 'Info Placard',   cat: 'decor',  kind: 'deco',     cost: 45,   gems: 0, w: 1, h: 1, wonder: 2,  sprite: 'sign',     desc: 'Educational! Nudges up the wonder rating.' },
     { id: 'case',     name: 'Display Case',   cat: 'decor',  kind: 'deco',     cost: 210,  gems: 0, w: 1, h: 1, wonder: 7,  sprite: 'case',     desc: 'A glass case of curious small fossils.' },
     { id: 'statue',   name: 'Ammonite Statue',cat: 'decor',  kind: 'deco',     cost: 260,  gems: 0, w: 1, h: 1, wonder: 8,  sprite: 'statue',   desc: 'A polished centerpiece guests photograph.' },
+    { id: 'shelf',    name: 'Specimen Shelf', cat: 'decor',  kind: 'deco',     cost: 180,  gems: 0, w: 1, h: 1, shelf: true, base: 4, perCurio: 1, sprite: 'shelf', desc: 'Displays your curios. Wonder grows as you discover more specimens.' },
+    { id: 'cabinet',  name: 'Curio Cabinet',  cat: 'decor',  kind: 'deco',     cost: 950,  gems: 1, w: 2, h: 1, shelf: true, base: 14, perCurio: 3, sprite: 'cabinet', desc: 'A grand cabinet. Big wonder scaled by your specimen collection.' },
     { id: 'carpet',   name: 'Red Carpet',     cat: 'decor',  kind: 'deco',     cost: 90,   gems: 0, w: 2, h: 1, wonder: 5,  comfort: 2, sprite: 'carpet', desc: 'Roll it out for the VIP experience.' },
     { id: 'fountain', name: 'Fossil Fountain', cat: 'decor', kind: 'deco',     cost: 900,  gems: 1, w: 2, h: 2, wonder: 22, comfort: 6, sprite: 'fountain', anim: true, desc: 'A grand water feature. Big wonder boost.' },
     { id: 'archway',  name: 'Bone Archway',   cat: 'decor',  kind: 'deco',     cost: 1400, gems: 2, w: 2, h: 2, wonder: 30, sprite: 'archway',  desc: 'A dramatic arch of giant rib bones.' },
@@ -229,7 +231,60 @@
     { id: 'q_mount5',   desc: 'Mount 5 skeletons in total',           type: 'mount',    mode: 'count', target: 5,  reward: { coins: 1200, gems: 3 } },
     { id: 'q_curator',  desc: 'Hire a Curator',                       type: 'hireCurator', mode: 'count', target: 1, reward: { coins: 800 } },
     { id: 'q_deep',     desc: 'Reach depth 8 anywhere',               type: 'depth',    mode: 'reach', target: 8,  reward: { coins: 2500, gems: 5 } },
+    { id: 'q_curio',    desc: 'Dig up a specimen curio',              type: 'curio',    mode: 'count', target: 1,  reward: { coins: 120 } },
+    { id: 'q_shelf',    desc: 'Build a Specimen Shelf',               type: 'shelf',    mode: 'count', target: 1,  reward: { coins: 200 } },
+    { id: 'q_curio8',   desc: 'Discover 8 different specimens',       type: 'curioUnique', mode: 'reach', target: 8, reward: { coins: 900, gems: 2 } },
+    { id: 'q_curio20',  desc: 'Discover 20 different specimens',      type: 'curioUnique', mode: 'reach', target: 20, reward: { coins: 4000, gems: 6 } },
   ];
+
+  // Single-piece collectibles (no assembly) - dug up whole and shown on a
+  // Specimen Shelf. `form` selects a procedural sprite shape.
+  const CURIO_WONDER = { common: 3, uncommon: 6, rare: 10, epic: 16, legendary: 24 };
+  const CURIOS = [
+    // --- bugs / critters ---
+    { id: 'trilobite', name: 'Trilobite',      cat: 'bug', form: 'segmented', rarity: 'common',   colors: ['#8f563b', '#663931', '#d9a066'] },
+    { id: 'isopod',    name: 'Giant Isopod',   cat: 'bug', form: 'segmented', rarity: 'common',   colors: ['#9badb7', '#696a6a', '#cbdbfc'] },
+    { id: 'ammonite',  name: 'Ammonite',       cat: 'bug', form: 'spiral',    rarity: 'common',   colors: ['#d9a066', '#8f563b', '#eec39a'] },
+    { id: 'nautilus',  name: 'Nautilus',       cat: 'bug', form: 'spiral',    rarity: 'uncommon', colors: ['#cbdbfc', '#5b6ee1', '#ffffff'] },
+    { id: 'dragonfly', name: 'Meganeura',      cat: 'bug', form: 'bug',       rarity: 'rare',     colors: ['#37946e', '#4b692f', '#5fcde4'] },
+    { id: 'seascorp',  name: 'Sea Scorpion',   cat: 'bug', form: 'segmented', rarity: 'rare',     colors: ['#4b692f', '#323c39', '#99e550'] },
+    { id: 'horseshoe', name: 'Horseshoe Crab', cat: 'bug', form: 'segmented', rarity: 'uncommon', colors: ['#663931', '#45283c', '#8f563b'] },
+    { id: 'brachiopod',name: 'Brachiopod',     cat: 'bug', form: 'disc',      rarity: 'common',   colors: ['#d9a066', '#8f563b', '#eec39a'] },
+    { id: 'crinoid',   name: 'Crinoid',        cat: 'bug', form: 'stick',     rarity: 'uncommon', colors: ['#cbdbfc', '#9badb7', '#ffffff'] },
+    { id: 'belemnite', name: 'Belemnite',      cat: 'bug', form: 'stick',     rarity: 'common',   colors: ['#847e87', '#595652', '#9badb7'] },
+    { id: 'amberbug',  name: 'Bug in Amber',   cat: 'bug', form: 'blob',      rarity: 'rare',     colors: ['#df7126', '#8f563b', '#fbf236'] },
+    { id: 'spider',    name: 'Fossil Spider',  cat: 'bug', form: 'bug',       rarity: 'uncommon', colors: ['#45283c', '#222034', '#76428a'] },
+    // --- plants ---
+    { id: 'fern',      name: 'Fern Frond',     cat: 'plant', form: 'leaf',    rarity: 'common',   colors: ['#6abe30', '#4b692f', '#99e550'] },
+    { id: 'ginkgo',    name: 'Ginkgo Leaf',    cat: 'plant', form: 'leaf',    rarity: 'uncommon', colors: ['#99e550', '#6abe30', '#fbf236'] },
+    { id: 'horsetail', name: 'Horsetail',      cat: 'plant', form: 'stick',   rarity: 'common',   colors: ['#4b692f', '#323c39', '#6abe30'] },
+    { id: 'seedfern',  name: 'Seed Fern',      cat: 'plant', form: 'leaf',    rarity: 'uncommon', colors: ['#8f974a', '#524b24', '#99e550'] },
+    { id: 'lycopod',   name: 'Lycopod Bark',   cat: 'plant', form: 'disc',    rarity: 'rare',     colors: ['#8f563b', '#663931', '#d9a066'] },
+    { id: 'cycadfrond',name: 'Cycad Frond',    cat: 'plant', form: 'leaf',    rarity: 'uncommon', colors: ['#37946e', '#4b692f', '#6abe30'] },
+    { id: 'petwood',   name: 'Petrified Wood', cat: 'plant', form: 'stick',   rarity: 'rare',     colors: ['#d9a066', '#8f563b', '#df7126'] },
+    { id: 'algae',     name: 'Stromatolite',   cat: 'plant', form: 'blob',    rarity: 'common',   colors: ['#524b24', '#323c39', '#8f974a'] },
+    { id: 'pinecone',  name: 'Fossil Cone',    cat: 'plant', form: 'egg',     rarity: 'common',   colors: ['#663931', '#45283c', '#8f563b'] },
+    { id: 'moss',      name: 'Ancient Moss',   cat: 'plant', form: 'blob',    rarity: 'uncommon', colors: ['#6abe30', '#37946e', '#99e550'] },
+    // --- artifacts ---
+    { id: 'pottery',   name: 'Pottery Shard',  cat: 'artifact', form: 'shard', rarity: 'common',  colors: ['#d9a066', '#8f563b', '#eec39a'] },
+    { id: 'arrowhead', name: 'Arrowhead',      cat: 'artifact', form: 'point', rarity: 'common',  colors: ['#847e87', '#595652', '#cbdbfc'] },
+    { id: 'amberbead', name: 'Amber Bead',     cat: 'artifact', form: 'egg',   rarity: 'uncommon',colors: ['#df7126', '#8a6f30', '#fbf236'] },
+    { id: 'boneneedle',name: 'Bone Needle',    cat: 'artifact', form: 'point', rarity: 'uncommon',colors: ['#eec39a', '#d9a066', '#ffffff'] },
+    { id: 'claypot',   name: 'Clay Vessel',    cat: 'artifact', form: 'egg',   rarity: 'rare',    colors: ['#ac3232', '#663931', '#df7126'] },
+    { id: 'stoneaxe',  name: 'Stone Axe',      cat: 'artifact', form: 'point', rarity: 'rare',    colors: ['#696a6a', '#323c39', '#9badb7'] },
+    { id: 'fossilegg', name: 'Fossil Egg',     cat: 'artifact', form: 'egg',   rarity: 'epic',    colors: ['#cbdbfc', '#8f563b', '#ffffff'] },
+    { id: 'idol',      name: 'Jade Idol',      cat: 'artifact', form: 'shard', rarity: 'epic',    colors: ['#37946e', '#4b692f', '#5fcde4'] },
+  ];
+
+  const CURIO_BIOME = {
+    temperate: { plant: 2, bug: 2, artifact: 1 }, desert: { artifact: 2, bug: 1 },
+    ice: { bug: 2, artifact: 1 }, volcanic: { artifact: 2, plant: 1 },
+    marine: { bug: 3, plant: 1 }, jungle: { plant: 3, bug: 1 }, deep: { artifact: 2, bug: 2, plant: 1 },
+  };
+  const CURIO_RATE = 0.13; // chance a treasure node is a curio
+
+  function curioById(id) { return CURIOS.find(function (c) { return c.id === id; }); }
+  function curioWonder(id) { const c = curioById(id); return c ? CURIO_WONDER[c.rarity] : 0; }
 
   const ENERGY_REGEN_MS = 8000;
   const ENERGY_REFILL_GEM_COST = 2;
@@ -254,6 +309,8 @@
     SHAPES: SHAPES, RARITY_SHAPES: RARITY_SHAPES,
     FOSSILS: FOSSILS, ORES: ORES, SITES: SITES, CATALOG: CATALOG, BIOMES: BIOMES,
     FLOORS: FLOORS, STAFF: STAFF, QUESTS: QUESTS,
+    CURIOS: CURIOS, CURIO_WONDER: CURIO_WONDER, CURIO_BIOME: CURIO_BIOME, CURIO_RATE: CURIO_RATE,
+    curioById: curioById, curioWonder: curioWonder,
     VIP_TIP: VIP_TIP, TRASH_CAP: TRASH_CAP, TRASH_PENALTY: TRASH_PENALTY,
     ENERGY_REGEN_MS: ENERGY_REGEN_MS, ENERGY_REFILL_GEM_COST: ENERGY_REFILL_GEM_COST,
     scaledCost: scaledCost, weightedKey: weightedKey, shapeCells: shapeCells,
