@@ -1260,6 +1260,97 @@
     return frames;
   }
 
+  // Jurassic-guy mascot ("Doc") - a friendly paleontologist dinosaur.
+  function mascotFrames() {
+    const frames = [];
+    for (let f = 0; f < 2; f++) {
+      const p = painter(24, 30);
+      // tail
+      p.curve([[16, 22], [20, 20], [23, 23]], C.dkgreen, true);
+      p.curve([[16, 21], [20, 19], [23, 22]], C.green);
+      // legs + feet
+      p.rect(8, 24, 3, 5, C.dkgreen); p.rect(13, 24, 3, 5, C.dkgreen);
+      p.rect(7, 28, 5, 2, C.ink); p.rect(13, 28, 5, 2, C.ink);
+      // body
+      p.disc(12, 18, 6, C.green); p.rect(6, 13, 13, 9, C.green);
+      p.rect(9, 15, 6, 7, C.lime); // belly
+      // neckerchief
+      p.rect(8, 12, 9, 2, C.red); p.px(12, 14, C.red);
+      // arms (idle vs pointing-up)
+      if (f === 0) { p.line(6, 16, 3, 19, C.green); p.px(2, 19, C.lime); p.px(1, 20, C.white); }
+      else { p.line(18, 15, 22, 10, C.green); p.px(22, 9, C.lime); }
+      // head
+      p.disc(12, 8, 5, C.green); p.rect(8, 4, 9, 7, C.green);
+      p.rect(5, 8, 4, 3, C.lime); p.px(5, 9, C.ink); // snout + nostril
+      p.px(11, 6, C.white); p.px(11, 6 + (f ? 0 : 0), C.white); p.px(12, 6, C.ink); // eye
+      p.px(6, 11, C.white); p.px(8, 11, C.white); // teeth
+      // safari hat
+      p.rect(7, 2, 11, 2, C.tan); p.rect(9, 0, 7, 2, C.tan); p.rect(6, 3, 13, 1, C.ltbrown);
+      p.rect(9, 1, 7, 1, C.cream);
+      frames.push(p.canvas);
+    }
+    return frames;
+  }
+
+  // Generic walking staff member with a tool. Returns {right:[2],left:[2]}.
+  function personFrames(cap, shirt, pants, skin, tool) {
+    const build = function () {
+      const out = [];
+      for (let f = 0; f < 2; f++) {
+        const p = painter(13, 15);
+        // cap
+        p.rect(3, 0, 6, 2, cap); p.rect(2, 2, 8, 1, cap); p.px(3, 0, C.white);
+        // face
+        p.rect(3, 3, 6, 3, skin); p.px(7, 4, C.ink);
+        // shirt + arms
+        p.rect(3, 6, 6, 4, shirt); p.px(2, 7, shirt); p.px(9, 7, shirt);
+        // legs (walk cycle)
+        if (f === 0) { p.rect(3, 10, 2, 3, pants); p.rect(7, 10, 2, 3, pants); }
+        else { p.rect(4, 10, 2, 3, pants); p.rect(6, 10, 2, 3, pants); }
+        p.rect(3, 13, 3, 1, C.ink); p.rect(6, 13, 3, 1, C.ink);
+        if (tool === 'broom') { p.line(10, 3, 10, 11, C.ltbrown); p.rect(9, 11, 4, 3, C.yellow); p.px(9, 12, C.orange); }
+        else if (tool === 'flag') { p.line(10, 1, 10, 10, C.ltbrown); p.rect(10, 1, 4, 3, C.red); p.px(13, 2, C.salmon); }
+        else if (tool === 'clip') { p.rect(9, 7, 3, 4, C.cream); p.px(10, 8, C.ink); p.px(10, 9, C.ink); }
+        out.push(p.canvas);
+      }
+      return out;
+    };
+    const r = build();
+    return { right: r, left: [flipped(r[0]), flipped(r[1])] };
+  }
+
+  // Fancy VIP guest - top hat, suit, monocle. {right,left}.
+  function vipFrames() {
+    const out = [];
+    for (let f = 0; f < 2; f++) {
+      const p = painter(12, 16);
+      // top hat
+      p.rect(3, 0, 6, 3, C.ink); p.rect(2, 3, 8, 1, C.ink); p.rect(3, 0, 6, 1, C.dkgray2);
+      // face
+      p.rect(3, 4, 6, 3, C.cream);
+      p.rect(6, 5, 2, 2, C.gold); p.px(7, 6, C.ink); // monocle
+      // suit
+      p.rect(3, 7, 6, 4, C.navy); p.px(2, 8, C.navy); p.px(9, 8, C.navy);
+      p.px(5, 7, C.white); p.px(6, 7, C.white);
+      p.rect(5, 8, 2, 3, C.red); // tie
+      p.rect(3, 7, 1, 4, C.gold); p.rect(8, 7, 1, 4, C.gold); // gold trim
+      // legs
+      if (f === 0) { p.rect(3, 11, 2, 3, C.dkgray2); p.rect(7, 11, 2, 3, C.dkgray2); }
+      else { p.rect(4, 11, 2, 3, C.dkgray2); p.rect(6, 11, 2, 3, C.dkgray2); }
+      p.rect(3, 14, 3, 1, C.ink); p.rect(6, 14, 3, 1, C.ink);
+      out.push(p.canvas);
+    }
+    return { right: out, left: [flipped(out[0]), flipped(out[1])] };
+  }
+
+  function trashSprites() {
+    const cup = sprite(['.RRRR.', 'RWWWWR', '.RRRR.', '.RRRR.', '.RRRR.', '..RR..'], { R: C.red, W: C.white });
+    const paper = sprite(['.WW.W.', 'WWWWWW', 'WLWWLW', 'WWWWWW', '.WWWW.'], { W: C.pale, L: C.ltgray });
+    const peel = sprite(['Y....Y', '.Y..Y.', '.YYYY.', 'YYYYYY', '.YYYY.'], { Y: C.yellow });
+    const can = sprite(['.GGGG.', 'GLLLLG', 'GLLLLG', 'GLLLLG', '.GGGG.'], { G: C.gray, L: C.ltgray });
+    return [cup, paper, peel, can];
+  }
+
   function sparkleFrames() {
     const a = painter(5, 5);
     a.px(2, 0, C.white); a.px(2, 4, C.white); a.px(0, 2, C.white); a.px(4, 2, C.white);
@@ -1445,6 +1536,15 @@
       s26: shadowSprite(26),
       s32: shadowSprite(32),
     };
+
+    A.mascot = mascotFrames();
+    A.vip = vipFrames();
+    A.staff = {
+      janitor: personFrames(C.navy, C.teal, C.dkgray2, C.cream, 'broom'),
+      guide: personFrames(C.red, C.salmon, C.navy, C.tan, 'flag'),
+      curator: personFrames(C.ltgray, C.pale, C.steel, C.cream, 'clip'),
+    };
+    A.trash = trashSprites();
 
     A.bubble = emoteBubble();
   };

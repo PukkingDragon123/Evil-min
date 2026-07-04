@@ -191,6 +191,46 @@
     { id: 'kiosk',    name: 'Ticket Kiosk',   cat: 'facility', kind: 'facility', cost: 800,  gems: 0, w: 1, h: 1, income: 6,  sprite: 'kiosk',    desc: 'A compact 1x1 coin booth.' },
   ];
 
+  // Buyable museum floors (each is a full building level with its own grid).
+  const FLOORS = [
+    { name: 'Ground Floor', cost: 0, gems: 0 },
+    { name: 'Upper Gallery', cost: 9000, gems: 2 },
+    { name: 'Sky Atrium', cost: 60000, gems: 6 },
+    { name: 'Fossil Vault', cost: 300000, gems: 18 },
+  ];
+
+  // Hireable staff. Cost scales with the number already hired.
+  const STAFF = [
+    { id: 'janitor', name: 'Janitor', icon: 'janitor', baseCost: 400, gems: 0, max: 6, desc: 'Roams the floor sweeping up litter before it upsets guests.' },
+    { id: 'guide', name: 'Tour Guide', icon: 'guide', baseCost: 1100, gems: 0, max: 6, comfort: 12, desc: 'Leads tours - raises visitor satisfaction (+comfort).' },
+    { id: 'curator', name: 'Curator', icon: 'curator', baseCost: 2600, gems: 0, max: 5, income: 0.1, desc: 'Curates exhibits for +10% museum income each.' },
+  ];
+
+  // VIP guests + litter tuning.
+  const VIP_TIP = 60;          // bonus coins a VIP drops per tip
+  const TRASH_CAP = 14;        // max litter on a floor
+  const TRASH_PENALTY = 0.02;  // satisfaction lost per litter (before staff)
+
+  // Quests. mode 'count' accumulates; 'reach' tracks a high-water value.
+  const QUESTS = [
+    { id: 'q_dig',      desc: 'Survey a tile at the dig site',        type: 'survey',   mode: 'count', target: 1,  reward: { coins: 60 } },
+    { id: 'q_extract',  desc: 'Excavate 3 fossils',                   type: 'extract',  mode: 'count', target: 3,  reward: { coins: 140, xp: 12 } },
+    { id: 'q_clear',    desc: 'Bank fossils by clearing a line',      type: 'clearLine',mode: 'count', target: 1,  reward: { coins: 160, gems: 1 } },
+    { id: 'q_mount',    desc: 'Mount your first skeleton',            type: 'mount',    mode: 'count', target: 1,  reward: { coins: 320, xp: 30 } },
+    { id: 'q_facility', desc: 'Build a facility in your museum',      type: 'facility', mode: 'count', target: 1,  reward: { coins: 240 } },
+    { id: 'q_janitor',  desc: 'Hire a Janitor',                       type: 'hireJanitor', mode: 'count', target: 1, reward: { coins: 260 } },
+    { id: 'q_trash',    desc: 'Clean up 5 pieces of litter',          type: 'trash',    mode: 'count', target: 5,  reward: { coins: 220, xp: 15 } },
+    { id: 'q_vip',      desc: 'Welcome a VIP guest',                  type: 'vip',      mode: 'count', target: 1,  reward: { gems: 2 } },
+    { id: 'q_depth',    desc: 'Dig down to depth 3',                  type: 'depth',    mode: 'reach', target: 3,  reward: { coins: 500, gems: 2 } },
+    { id: 'q_site',     desc: 'Unlock a new excavation site',         type: 'unlockSite', mode: 'count', target: 1, reward: { coins: 400 } },
+    { id: 'q_upgrade',  desc: 'Buy an upgrade',                       type: 'upgrade',  mode: 'count', target: 1,  reward: { coins: 300 } },
+    { id: 'q_floor',    desc: 'Buy a new museum floor',               type: 'floor',    mode: 'count', target: 1,  reward: { gems: 3 } },
+    { id: 'q_visitors', desc: 'Draw a crowd of 20 visitors',          type: 'visitors', mode: 'reach', target: 20, reward: { coins: 700 } },
+    { id: 'q_mount5',   desc: 'Mount 5 skeletons in total',           type: 'mount',    mode: 'count', target: 5,  reward: { coins: 1200, gems: 3 } },
+    { id: 'q_curator',  desc: 'Hire a Curator',                       type: 'hireCurator', mode: 'count', target: 1, reward: { coins: 800 } },
+    { id: 'q_deep',     desc: 'Reach depth 8 anywhere',               type: 'depth',    mode: 'reach', target: 8,  reward: { coins: 2500, gems: 5 } },
+  ];
+
   const ENERGY_REGEN_MS = 8000;
   const ENERGY_REFILL_GEM_COST = 2;
 
@@ -213,6 +253,8 @@
     RARITY: RARITY, RARITY_ORDER: RARITY_ORDER,
     SHAPES: SHAPES, RARITY_SHAPES: RARITY_SHAPES,
     FOSSILS: FOSSILS, ORES: ORES, SITES: SITES, CATALOG: CATALOG, BIOMES: BIOMES,
+    FLOORS: FLOORS, STAFF: STAFF, QUESTS: QUESTS,
+    VIP_TIP: VIP_TIP, TRASH_CAP: TRASH_CAP, TRASH_PENALTY: TRASH_PENALTY,
     ENERGY_REGEN_MS: ENERGY_REGEN_MS, ENERGY_REFILL_GEM_COST: ENERGY_REFILL_GEM_COST,
     scaledCost: scaledCost, weightedKey: weightedKey, shapeCells: shapeCells,
     fossilById: fossilById, oreById: oreById, siteById: siteById, catalogById: catalogById,

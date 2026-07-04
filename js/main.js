@@ -14,6 +14,7 @@
   const Au = window.Audio2, Dig = window.Dig, Inv = window.Inventory, U = window.Upgrades, FX = window.FX;
   const VW = R.VW, VH = R.VH;
   function C() { return window.Assets.C; }
+  function emit(type, val) { if (window.Quests) window.Quests.emit(type, val); if (window.Tutorial) window.Tutorial.emit(type); }
 
   function resize() {
     const scale = Math.min(window.innerWidth / VW, window.innerHeight / VH);
@@ -33,11 +34,11 @@
     invGhost: null, invLayout: null, digCursor: null, digLayout: null,
     digAnims: [], offlineData: null,
 
-    setTab: function (id) { this.tab = id; this.editMode = false; this.selectedItem = -1; if (id !== 'museum' && this.placement) this.cancelPlacement(); if (id === 'storage') this.activePiece = Math.min(this.activePiece, Math.max(0, S.get().queue.length - 1)); },
+    setTab: function (id) { this.tab = id; this.editMode = false; this.selectedItem = -1; if (id !== 'museum' && this.placement) this.cancelPlacement(); if (id === 'storage') this.activePiece = Math.min(this.activePiece, Math.max(0, S.get().queue.length - 1)); emit('tab' + id.charAt(0).toUpperCase() + id.slice(1)); },
     openModal: function (n) { this.modal = n; this.scrollY = 0; },
     closeModal: function () { this.modal = null; },
     beginPlacement: function (id, cost, gems) { const c = S.findFreeCell(id) || { cx: 0, cy: 0 }; this.placement = { id: id, cost: cost, gems: gems, moveIndex: -1, cx: c.cx, cy: c.cy, valid: true }; this.setTab('museum'); this.updateGhostValid(); },
-    startMove: function (i) { const it = S.get().museum[i]; if (!it) return; this.placement = { id: it.id, cost: 0, gems: 0, moveIndex: i, cx: it.cx, cy: it.cy, valid: true }; this.selectedItem = -1; this.editMode = true; UI.toast('Tap a new spot', C().cyan); },
+    startMove: function (i) { const it = S.curMuseum()[i]; if (!it) return; this.placement = { id: it.id, cost: 0, gems: 0, moveIndex: i, cx: it.cx, cy: it.cy, valid: true }; this.selectedItem = -1; this.editMode = true; UI.toast('Tap a new spot', C().cyan); },
     cancelPlacement: function () { this.placement = null; },
     updateGhostValid: function () { if (!this.placement) return; const fp = S.itemFootprint(this.placement.id); this.placement.valid = S.cellFree(this.placement.cx, this.placement.cy, fp.w, fp.h, this.placement.moveIndex >= 0 ? this.placement.moveIndex : undefined); },
     commitPlacement: function (cx, cy) {
@@ -50,19 +51,20 @@
       else {
         if (!S.spend(p.cost, p.gems)) { Au.play('error'); UI.toast('Cannot afford', C().salmon); this.placement = null; return; }
         S.placeItem(p.id, cx, cy); S.get().owned[p.id] = (S.get().owned[p.id] || 0) + 1; Au.play('place'); S.addXp(6); UI.toast(UI.displayName(p.id) + ' placed!', C().lime);
+        const cat = D.catalogById(p.id); if (cat) emit(cat.kind === 'facility' ? 'facility' : 'deco');
       }
       this.placement = null; S.saveSoon();
     },
     sellItem: function (i) {
-      const st = S.get(); const it = st.museum[i]; if (!it) return;
+      const st = S.get(); const it = S.curMuseum()[i]; if (!it) return;
       const fos = D.fossilById(it.id); let refund = 0;
       if (fos) { refund = Math.round(D.RARITY[fos.rarity].cell * 3); st.mounted[it.id] = Math.max(0, (st.mounted[it.id] || 1) - 1); st.stats.mounted = Math.max(0, st.stats.mounted - 1); }
       else { const cat = D.catalogById(it.id); if (cat) { const owned = st.owned[it.id] || 1; refund = Math.floor(D.scaledCost(cat.cost, owned - 1) * 0.5); st.owned[it.id] = Math.max(0, owned - 1); } }
       S.removeItem(i); S.addCoins(refund); this.selectedItem = -1; UI.toast('Sold for ' + refund + ' coins', C().yellow); S.saveSoon();
     },
     celebrate: function (fossilId) {
-      const st = S.get(); let target = null;
-      for (let i = st.museum.length - 1; i >= 0; i--) if (st.museum[i].id === fossilId) { target = st.museum[i]; break; }
+      const m = S.curMuseum(); let target = null;
+      for (let i = m.length - 1; i >= 0; i--) if (m[i].id === fossilId) { target = m[i]; break; }
       let px = VW / 2, py = VH / 2;
       if (target) { const fp = S.itemFootprint(fossilId); const p = window.Museum.cellToPx(target.cx + fp.w / 2, target.cy); px = p.x; py = p.y - 10; }
       FX.confetti(px, py, 44); FX.ring(px, py, D.RARITY[D.fossilById(fossilId).rarity].glow, 28);
@@ -129,7 +131,7 @@
     if (app.digMode === 'survey') {
       if (c.flagged) { UI.toast('Flagged - use EXCAVATE to dig it', C().pale); return; }
       if (st.energy < 1) { Au.play('error'); UI.toast('Out of energy', C().salmon); return; }
-      S.useEnergy(1); st.stats.digs++;
+      S.useEnergy(1); st.stats.digs++; emit('survey');
       const res = Dig.survey(b, site, cell.x, cell.y);
       Au.play('dig'); FX.dust(wx, wy, biome.dust, 6);
       if (res.hit) { extract(res.hit.node, res.hit.pristine, wx, wy, cell); }
@@ -158,6 +160,7 @@
       const ok = S.pushBlock(block);
       st_extracted();
       if (ok) {
+        emit('extract');
         Au.play(pristine ? 'find' : 'ore'); FX.floatText(wx, wy - 6, f.name, rc.color, { scale: 1 });
         FX.burst(wx, wy, rc.glow, 10); S.addXp(pristine ? 6 : 3);
         UI.toast(pristine ? 'Excavated ' + f.name + '!' : 'Chipped a ' + f.name, rc.color, window.Assets.pieces.skull);
@@ -192,6 +195,8 @@
     const res = Inv.place(active, cell.gx, cell.gy);
     st.queue.splice(app.activePiece, 1);
     if (app.activePiece >= st.queue.length) app.activePiece = Math.max(0, st.queue.length - 1);
+    emit('place');
+    if (res && res.lines > 0) emit('clearLine', 1);
     // FX
     const gxpx = L.gx + cell.gx * L.cs, gypx = L.gy + cell.gy * L.cs;
     if (res && res.lines > 0) {
@@ -215,10 +220,18 @@
   // --- museum --------------------------------------------------------------
   function handleMuseumTap(x, y) {
     if (app.placement) { const cell = R.screenToMuseumCell(x, y); if (cell) app.commitPlacement(cell.cx, cell.cy); else app.cancelPlacement(); return; }
+    // tap litter to clean it up
+    if (!app.editMode) {
+      const trash = S.curTrash();
+      for (let i = 0; i < trash.length; i++) {
+        const dx = trash[i].x - x, dy = trash[i].y - y;
+        if (dx * dx + dy * dy < 90) { const tx = trash[i].x, ty = trash[i].y; S.removeTrash(i); S.addCoins(5); S.addXp(1); emit('trash'); Au.play('flag'); FX.dust(tx, ty, C().dkgray2, 5); FX.floatText(tx, ty - 4, '+5', C().yellow); return; }
+      }
+    }
     const cell = R.screenToMuseumCell(x, y); if (!cell) { app.selectedItem = -1; return; }
     if (app.editMode) { app.selectedItem = R.museumItemAt(cell.cx, cell.cy); if (app.selectedItem >= 0) Au.play('click'); return; }
     const idx = R.museumItemAt(cell.cx, cell.cy);
-    if (idx >= 0) { const it = S.get().museum[idx]; const f = D.fossilById(it.id); if (f) { UI.toast(f.name + ' - ' + f.blurb, D.RARITY[f.rarity].color); Au.play('click'); } }
+    if (idx >= 0) { const it = S.curMuseum()[idx]; const f = D.fossilById(it.id); if (f) { UI.toast(f.name + ' - ' + f.blurb, D.RARITY[f.rarity].color); Au.play('click'); } }
   }
 
   // pointer wiring
@@ -250,15 +263,26 @@
     else FX.burst(x, yTop + Math.random() * 30, biome.dust, 1, { spMin: 2, spMax: 6, g: 6, up: 0, ttl: 1800, sz: 1 });
   }
 
+  // museum ambient dust motes for a bit more atmosphere
+  let mAmbient = 0;
+  function spawnMuseumAmbient(dt) {
+    mAmbient += dt; if (mAmbient < 300) return; mAmbient = 0;
+    const x = R.CONTENT.x + Math.random() * R.CONTENT.w;
+    FX.burst(x, R.CONTENT.y + 6 + Math.random() * 30, '#fff6d0', 1, { spMin: 1, spMax: 4, g: 3, up: -2, ttl: 2600, sz: 1 });
+  }
+
   // =========================================================================
   // MAIN LOOP
   // =========================================================================
-  let last = 0, levelWatch = 1;
+  let last = 0, levelWatch = 1, visitorEmit = 0;
   function frame(now) {
     if (!last) last = now; let dt = now - last; last = now; if (dt > 100) dt = 100;
 
     S.tickEnergy(dt); window.Museum.update(dt); FX.update(dt); UI.tickToasts(dt);
     for (let i = app.digAnims.length - 1; i >= 0; i--) { app.digAnims[i].life += dt; if (app.digAnims[i].life > app.digAnims[i].ttl) app.digAnims.splice(i, 1); }
+
+    visitorEmit += dt;
+    if (visitorEmit > 1000) { visitorEmit = 0; emit('visitors', S.computeStats().visitors); }
 
     const lvl = S.get().level;
     if (lvl > levelWatch) { levelWatch = lvl; Au.play('levelup'); UI.toast('Level up! Now level ' + lvl, C().gold, window.Assets.icons.gem); FX.confetti(VW / 2, R.HUD_H + 20, 30); }
@@ -269,7 +293,7 @@
     ctx.save(); ctx.translate(Math.round(so.x), Math.round(so.y));
     UI.reset();
 
-    if (app.tab === 'museum') { R.drawMuseum(ctx, now, app.placement); FX.draw(ctx); }
+    if (app.tab === 'museum') { if (!app.modal) spawnMuseumAmbient(dt); R.drawMuseum(ctx, now, app.placement); FX.draw(ctx); }
     else if (app.tab === 'dig') {
       const site = D.siteById(app.siteId); const b = Dig.getBoard(site);
       if (!app.modal) spawnAmbient(dt, site);
@@ -284,10 +308,14 @@
       else if (app.tab === 'dig') { const site = D.siteById(app.siteId); UI.drawDigOverlay(ctx, now, app, Dig.getBoard(site), site); }
       else if (app.tab === 'storage') UI.drawStorageOverlay(ctx, now, app);
     }
+    // interactive tutorial rides on top of the tabs (only when no modal is up)
+    if (!app.modal) UI.drawTutorial(ctx, now, app);
+
     if (app.modal === 'collection') UI.drawCollection(ctx, now, app);
     else if (app.modal === 'sites') UI.drawSites(ctx, now, app);
     else if (app.modal === 'upgrades') UI.drawUpgrades(ctx, now, app);
-    else if (app.modal === 'intro') UI.drawIntro(ctx, now, app);
+    else if (app.modal === 'staff') UI.drawStaff(ctx, now, app);
+    else if (app.modal === 'quests') UI.drawQuests(ctx, now, app);
     else if (app.modal === 'offline') UI.drawOffline(ctx, now, app);
 
     UI.drawToasts(ctx);
@@ -308,8 +336,12 @@
     for (let i = 0; i < D.SITES.length; i++) if (st.sites[D.SITES[i].id]) app.siteId = D.SITES[i].id;
     if (!st.sites[app.siteId]) app.siteId = 'quarry';
 
-    if (!had || st.firstRun) { app.tab = 'museum'; app.openModal('intro'); }
-    else { const off = S.claimOffline(); if (off) { app.offlineData = off; app.openModal('offline'); } app.tab = 'museum'; }
+    if (!had || st.firstRun) {
+      // first run: hand off to Doc's interactive tutorial (no modal to dismiss)
+      st.firstRun = false; window.Tutorial.begin(); app.tab = 'museum'; S.saveSoon();
+    } else {
+      const off = S.claimOffline(); if (off) { app.offlineData = off; app.openModal('offline'); } app.tab = 'museum';
+    }
 
     resize();
     requestAnimationFrame(frame);

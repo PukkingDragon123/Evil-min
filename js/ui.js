@@ -105,17 +105,18 @@
     });
 
     // level badge
-    const lvx = VW - 116;
+    const lvx = VW - 120;
     ctx.fillStyle = C.navy; ctx.fillRect(lvx, y - 1, 28, 14);
     ctx.fillStyle = C.blue; ctx.fillRect(lvx + 1, y, 26, 12);
     Font.drawText(ctx, 'LV', lvx + 3, y + 3, C.pale); Font.drawText(ctx, String(st.level), lvx + 15, y + 3, C.white);
-    // visitors + wonder
-    Font.drawText(ctx, '♥', VW - 84, y + 2, C.salmon); Font.drawText(ctx, String(stats.visitors), VW - 76, y + 2, C.white);
-    Font.drawText(ctx, '★', VW - 58, y + 2, C.yellow); Font.drawText(ctx, fmt(stats.wonder), VW - 50, y + 2, C.white);
+    // visitors
+    Font.drawText(ctx, '♥', VW - 88, y + 2, C.salmon); Font.drawText(ctx, String(stats.visitors), VW - 80, y + 2, C.white);
 
-    // gear (upgrades) + mute
-    button(ctx, VW - 32, y - 1, 14, 14, '*', { color: C.teal }, function () { Au.play('click'); app.openModal('upgrades'); });
-    button(ctx, VW - 16, y - 1, 14, 14, Au.isMuted() ? 'x' : '=', { color: Au.isMuted() ? C.dkgray2 : C.teal }, function () {
+    // quests + gear (upgrades) + mute
+    button(ctx, VW - 52, y - 1, 15, 14, 'Q', { color: C.gold }, function () { Au.play('click'); app.openModal('quests'); });
+    if (window.Quests) { const nx = window.Quests.next(); if (nx) { ctx.fillStyle = C.salmon; ctx.fillRect(VW - 40, y - 2, 4, 4); } }
+    button(ctx, VW - 35, y - 1, 15, 14, '*', { color: C.teal }, function () { Au.play('click'); app.openModal('upgrades'); });
+    button(ctx, VW - 18, y - 1, 15, 14, Au.isMuted() ? 'x' : '=', { color: Au.isMuted() ? C.dkgray2 : C.teal }, function () {
       Au.setMuted(!Au.isMuted()); S.get().muted = Au.isMuted(); S.saveSoon(); Au.play('click');
     });
   }
@@ -157,16 +158,39 @@
   // =========================================================================
   // MUSEUM overlay
   // =========================================================================
+  function emit(type, val) { if (window.Quests) window.Quests.emit(type, val); if (window.Tutorial) window.Tutorial.emit(type); }
+
   function drawMuseumOverlay(ctx, t, app) {
-    const stats = S.computeStats();
-    panel(ctx, 4, HUD_H + 4, 148, 26, 'rgba(27,25,48,0.85)');
-    Font.drawText(ctx, 'DINO DIG MUSEUM', 10, HUD_H + 8, C.cyan, { shadow: C.ink });
-    Font.drawText(ctx, 'Exhibits ' + stats.exhibits, 10, HUD_H + 17, C.pale);
-    Font.drawText(ctx, '+' + stats.cps.toFixed(1) + '/s', 148, HUD_H + 17, C.yellow, { align: 2 });
+    const st = S.get(); const stats = S.computeStats();
+    panel(ctx, 4, HUD_H + 4, 148, 24, 'rgba(27,25,48,0.85)');
+    Font.drawText(ctx, 'DINO DIG MUSEUM', 10, HUD_H + 7, C.cyan, { shadow: C.ink });
+    Font.drawText(ctx, 'Exhibits ' + stats.exhibits + '  ★' + fmt(stats.wonder), 10, HUD_H + 16, C.pale);
+    Font.drawText(ctx, '+' + stats.cps.toFixed(1) + '/s', 148, HUD_H + 16, C.yellow, { align: 2 });
+    if (stats.trash > 0) Font.drawText(ctx, 'Litter ' + stats.trash, 92, HUD_H + 7, C.salmon);
+
+    // floor selector strip
+    const fy = HUD_H + 30;
+    panel(ctx, 4, fy, 148, 24, 'rgba(27,25,48,0.85)');
+    const unlocked = []; for (let i = 0; i < st.floors.length; i++) if (st.floors[i].unlocked) unlocked.push(i);
+    const pos = unlocked.indexOf(st.floor);
+    button(ctx, 6, fy + 2, 12, 10, '<', { color: C.steel, enabled: pos > 0 }, function () { S.setFloor(unlocked[pos - 1]); Au.play('tab'); });
+    button(ctx, 138, fy + 2, 12, 10, '>', { color: C.steel, enabled: pos < unlocked.length - 1 }, function () { S.setFloor(unlocked[pos + 1]); Au.play('tab'); });
+    Font.drawText(ctx, D.FLOORS[st.floor].name, 78, fy + 3, C.white, { align: 1, shadow: C.ink });
+    const firstLocked = st.floors.findIndex(function (f) { return !f.unlocked; });
+    if (firstLocked >= 0) {
+      const fl = D.FLOORS[firstLocked]; const afford = S.canAfford(fl.cost, fl.gems);
+      button(ctx, 20, fy + 13, 108, 9, 'BUY ' + fl.name, { color: afford ? C.orange : C.dkgray2, enabled: afford }, function () {
+        if (S.buyFloor(firstLocked)) { Au.play('buy'); emit('floor'); FX.confetti(78, fy, 20); toast(fl.name + ' unlocked!', C.lime); S.setFloor(firstLocked); }
+        else { Au.play('error'); toast('Need ' + fmt(fl.cost) + 'c' + (fl.gems ? ' +' + fl.gems + ' gems' : ''), C.salmon); }
+      });
+    } else {
+      Font.drawText(ctx, 'Floor ' + (pos + 1) + ' of ' + unlocked.length, 78, fy + 14, C.gray, { align: 1 });
+    }
 
     const bx = VW - 66;
-    button(ctx, bx, HUD_H + 4, 62, 15, 'FOSSILS', { color: C.purple, icon: A.icons.bone }, function () { Au.play('click'); app.openModal('collection'); });
-    button(ctx, bx, HUD_H + 22, 62, 15, app.editMode ? 'DONE' : 'ARRANGE', { color: app.editMode ? C.green : C.steel }, function () { Au.play('click'); app.editMode = !app.editMode; app.selectedItem = -1; if (app.editMode) toast('Tap an exhibit to move or sell', C.cyan); });
+    button(ctx, bx, HUD_H + 4, 62, 14, 'FOSSILS', { color: C.purple, icon: A.icons.bone }, function () { Au.play('click'); app.openModal('collection'); });
+    button(ctx, bx, HUD_H + 21, 62, 14, 'STAFF', { color: C.teal, icon: A.icons.pick }, function () { Au.play('click'); app.openModal('staff'); });
+    button(ctx, bx, HUD_H + 38, 62, 14, app.editMode ? 'DONE' : 'ARRANGE', { color: app.editMode ? C.green : C.steel }, function () { Au.play('click'); app.editMode = !app.editMode; app.selectedItem = -1; if (app.editMode) toast('Tap an exhibit to move or sell', C.cyan); });
 
     if (app.placement) {
       panel(ctx, VW / 2 - 92, VH - TAB_H - 22, 184, 18, 'rgba(27,25,48,0.92)');
@@ -175,7 +199,7 @@
     }
 
     if (app.editMode && app.selectedItem >= 0) {
-      const st = S.get(); const it = st.museum[app.selectedItem];
+      const it = S.curMuseum()[app.selectedItem];
       if (it) {
         const fp = S.itemFootprint(it.id); const px = window.Museum.cellToPx(it.cx, it.cy);
         let popX = Math.max(4, Math.min(VW - 100, px.x)); let popY = px.y - 26;
@@ -212,7 +236,7 @@
 
     if (window.Dig.isCleared(board)) {
       button(ctx, VW - 154, HUD_H + 15, 148, 9, 'DIG DEEPER >>', { color: C.green }, function () {
-        const d = window.Dig.descend(site); Au.play('newarea'); FX.confetti(VW / 2, HUD_H + 40, 30); toast('Descending to depth ' + d + '!', C.lime);
+        const d = window.Dig.descend(site); Au.play('newarea'); emit('depth', d); FX.confetti(VW / 2, HUD_H + 40, 30); toast('Descending to depth ' + d + '!', C.lime);
       });
     } else {
       Font.drawText(ctx, app.digMode === 'survey' ? 'Tap: survey (reveals clues)' : 'Tap: send dig team (hold=flag)', VW - 154, HUD_H + 16, C.gray);
@@ -367,8 +391,7 @@
     Font.drawText(ctx, f.name, x + 44, y + 3, C.white, { shadow: C.ink });
     Font.drawText(ctx, stars(rc), x + 44, y + 12, rc.color);
     Font.drawText(ctx, f.period + '  +' + f.income + '/s', x + 44 + Font.textW(stars(rc)) + 6, y + 12, C.pale);
-    const mounted = (st.mounted[f.id] || 0) + countPlaced(f.id);
-    Font.drawText(ctx, 'On display: ' + mounted, x + 44, y + 21, C.lime);
+    Font.drawText(ctx, 'On display: ' + countPlaced(f.id), x + 44, y + 21, C.lime);
 
     // progress toward next mount
     const prog = S.speciesOf(f.id), need = S.mountThreshold(f.id);
@@ -380,13 +403,14 @@
     const canM = S.canMount(f.id);
     button(ctx, x + w - 60, y + 6, 56, h - 12, canM ? 'MOUNT!' : 'DIG MORE', { color: canM ? C.green : C.dkgray2, enabled: canM }, function () {
       if (S.mount(f.id)) {
+        emit('mount');
         const cell = S.findFreeCell(f.id);
         if (cell) { S.placeItem(f.id, cell.cx, cell.cy); Au.play('complete'); S.addXp(30 + rc.stars * 20); toast(f.name + ' mounted! ' + stars(rc), rc.color); app.closeModal(); app.setTab('museum'); app.celebrate(f.id); }
         else { Au.play('complete'); toast('Mounted (no floor space!)', C.orange); }
       }
     });
   }
-  function countPlaced(id) { const st = S.get(); let n = 0; for (let i = 0; i < st.museum.length; i++) if (st.museum[i].id === id) n++; return n; }
+  function countPlaced(id) { const st = S.get(); let n = 0; for (let fi = 0; fi < st.floors.length; fi++) { const m = st.floors[fi].museum; for (let i = 0; i < m.length; i++) if (m[i].id === id) n++; } return n; }
 
   function drawSites(ctx, t, app) {
     modalBackdrop(ctx, app);
@@ -418,7 +442,7 @@
     } else {
       const afford = S.canAfford(site.cost, 0);
       button(ctx, x + w - 78, y + 10, 70, 16, 'UNLOCK', { color: afford ? C.orange : C.dkgray2, enabled: afford }, function () {
-        if (S.spend(site.cost, 0)) { st.sites[site.id] = true; S.saveSoon(); Au.play('newarea'); S.addXp(60); toast(site.name + ' unlocked!', C.lime); } else { Au.play('error'); toast('Need ' + fmt(site.cost) + ' coins', C.salmon); }
+        if (S.spend(site.cost, 0)) { st.sites[site.id] = true; S.saveSoon(); Au.play('newarea'); emit('unlockSite'); S.addXp(60); toast(site.name + ' unlocked!', C.lime); } else { Au.play('error'); toast('Need ' + fmt(site.cost) + ' coins', C.salmon); }
       });
       costLabel(ctx, x + w - 78, y + 30, site.cost, 0, afford);
     }
@@ -451,11 +475,110 @@
     else {
       const afford = S.canAfford(cost.coins, cost.gems);
       button(ctx, x + w - 76, y + 6, 70, 14, 'UPGRADE', { color: afford ? C.green : C.dkgray2, enabled: afford }, function () {
-        if (U.buy(u.id)) { Au.play('buy'); FX.confetti(x + w - 40, y + h / 2, 16); toast(u.name + ' -> ' + u.fmt(U.level(u.id)), C.lime); if (u.id === 'storage') S.resizeGrid(U.storageSize()); }
+        if (U.buy(u.id)) { Au.play('buy'); emit('upgrade'); FX.confetti(x + w - 40, y + h / 2, 16); toast(u.name + ' -> ' + u.fmt(U.level(u.id)), C.lime); if (u.id === 'storage') S.resizeGrid(U.storageSize()); }
         else { Au.play('error'); toast('Cannot afford', C.salmon); }
       });
       costLabel(ctx, x + w - 76, y + 22, cost.coins, cost.gems, afford);
     }
+  }
+
+  function drawStaff(ctx, t, app) {
+    modalBackdrop(ctx, app);
+    const w = 380, h = 200, x = (VW - w) / 2, y = (VH - h) / 2;
+    panel(ctx, x, y, w, h, '#232038', C.gold);
+    Font.drawText(ctx, 'STAFF', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
+    button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
+    Font.drawText(ctx, 'Hire helpers to keep guests happy.', x + w / 2, y + 20, C.pale, { align: 1 });
+    const st = S.get();
+    let cy = y + 32; const rh = 48;
+    for (let i = 0; i < D.STAFF.length; i++) {
+      const s = D.STAFF[i]; const owned = st.staff[s.id] || 0; const maxed = owned >= s.max;
+      const cost = S.staffCost(s.id); const afford = S.canAfford(cost, s.gems || 0);
+      panel(ctx, x + 8, cy, w - 16, rh, '#2b2740', C.teal);
+      // little staff sprite
+      const set = A.staff[s.id]; if (set) R.blit(ctx, set.right[0], x + 22, cy + rh / 2, rh - 8, 1);
+      Font.drawText(ctx, s.name, x + 40, cy + 5, C.white, { shadow: C.ink });
+      Font.drawTextWrapped(ctx, s.desc, x + 40, cy + 14, w - 150, C.ltgray);
+      Font.drawText(ctx, 'Hired ' + owned + '/' + s.max, x + 40, cy + rh - 9, C.lime);
+      if (maxed) Font.drawText(ctx, 'MAX', x + w - 40, cy + rh / 2 - 3, C.gold, { align: 1 });
+      else {
+        button(ctx, x + w - 80, cy + 8, 70, 15, 'HIRE', { color: afford ? C.green : C.dkgray2, enabled: afford }, function () {
+          if (S.hireStaff(s.id)) { Au.play('buy'); emit('hire' + s.id.charAt(0).toUpperCase() + s.id.slice(1)); FX.confetti(x + w - 45, cy + rh / 2, 14); toast('Hired a ' + s.name + '!', C.lime); }
+          else { Au.play('error'); toast('Cannot afford', C.salmon); }
+        });
+        costLabel(ctx, x + w - 80, cy + 26, cost, s.gems || 0, afford);
+      }
+      cy += rh + 4;
+    }
+  }
+
+  function drawQuests(ctx, t, app) {
+    modalBackdrop(ctx, app);
+    const w = 400, h = 220, x = (VW - w) / 2, y = (VH - h) / 2;
+    panel(ctx, x, y, w, h, '#232038', C.gold);
+    const done = window.Quests.doneCount(), total = D.QUESTS.length;
+    Font.drawText(ctx, 'QUESTS', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
+    Font.drawText(ctx, done + '/' + total + ' complete', x + w / 2, y + 18, C.gold, { align: 1 });
+    button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
+    const vx = x + 6, vy = y + 26, vw = w - 14, vh = h - 32;
+    ctx.save(); ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
+    const rows = window.Quests.list(); const rh = 26; let cy = vy - app.scrollY;
+    for (let i = 0; i < rows.length; i++) { drawQuestRow(ctx, rows[i], vx, cy, vw, rh); cy += rh + 3; }
+    ctx.restore();
+    scrollClip(ctx, app, vx, vy, vw, vh, rows.length * (rh + 3));
+  }
+  function drawQuestRow(ctx, q, x, y, w, h) {
+    if (y + h < HUD_H || y > VH) return;
+    panel(ctx, x, y, w, h, q.done ? '#243024' : '#2b2740', q.done ? C.green : C.gold);
+    ctx.fillStyle = q.done ? C.green : C.gold; ctx.fillRect(x, y, 3, h);
+    Font.drawText(ctx, q.def.desc, x + 8, y + 4, q.done ? C.lime : C.white, { shadow: C.ink });
+    if (q.done) { Font.drawText(ctx, 'DONE', x + w - 8, y + 4, C.lime, { align: 2 }); }
+    else {
+      progressBar(ctx, x + 8, y + 14, w - 120, 7, q.progress / q.def.target, C.gold);
+      Font.drawText(ctx, q.progress + '/' + q.def.target, x + 8 + (w - 120) / 2, y + 14, C.white, { align: 1 });
+    }
+    // reward
+    const r = q.def.reward; let rs = [];
+    if (r.coins) rs.push(r.coins + 'c'); if (r.gems) rs.push(r.gems + '♦'); if (r.xp) rs.push(r.xp + 'xp');
+    Font.drawText(ctx, rs.join(' '), x + w - 8, y + 15, q.done ? C.gray : C.yellow, { align: 2 });
+  }
+
+  // Interactive tutorial: mascot + speech bubble + highlight + Next/Skip.
+  function highlightRect(key) {
+    const tw = VW / 4;
+    if (key === 'tabDig') return { x: 0, y: VH - TAB_H, w: tw, h: TAB_H };
+    if (key === 'tabStorage') return { x: tw, y: VH - TAB_H, w: tw, h: TAB_H };
+    if (key === 'tabMuseum') return { x: tw * 2, y: VH - TAB_H, w: tw, h: TAB_H };
+    if (key === 'tabShop') return { x: tw * 3, y: VH - TAB_H, w: tw, h: TAB_H };
+    if (key === 'digMode') return { x: VW - 154, y: HUD_H + 4, w: 66, h: 10 };
+    if (key === 'quests') return { x: VW - 52, y: 5, w: 15, h: 14 };
+    return null;
+  }
+  function drawTutorial(ctx, t, app) {
+    const Tut = window.Tutorial; if (!Tut || !Tut.active()) return;
+    const step = Tut.current(); if (!step) return;
+    // highlight
+    const hr = highlightRect(step.highlight);
+    if (hr) {
+      const pulse = Math.sin(t / 220) * 0.5 + 0.5;
+      ctx.strokeStyle = C.yellow; ctx.lineWidth = 2; ctx.globalAlpha = 0.5 + pulse * 0.5;
+      ctx.strokeRect(hr.x + 1, hr.y + 1, hr.w - 2, hr.h - 2); ctx.globalAlpha = 1;
+    }
+    // mascot bottom-left
+    const mframe = A.mascot[(t / 500 | 0) % 2];
+    const mx = 30, my = VH - TAB_H - 6;
+    ctx.drawImage(A.shadows.s16, Math.round(mx - 8), Math.round(my - 3));
+    ctx.drawImage(mframe, Math.round(mx - mframe.width / 2), Math.round(my - mframe.height));
+    // speech bubble
+    const bx = mx + 20, by = HUD_H + 60, bw = VW - bx - 12, bh = 66;
+    panel(ctx, bx, by, bw, bh, '#fbf6e8', C.gold);
+    Font.drawText(ctx, 'DOC says:', bx + 6, by + 5, C.orange);
+    Font.drawTextWrapped(ctx, step.text, bx + 6, by + 15, bw - 12, C.ink);
+    // little pointer tail toward mascot
+    ctx.fillStyle = '#fbf6e8'; ctx.fillRect(bx - 3, by + bh - 14, 4, 6);
+    Font.drawText(ctx, 'Step ' + (Tut.stepIndex() + 1) + '/' + Tut.total(), bx + 6, by + bh - 10, C.gray);
+    button(ctx, bx + bw - 84, by + bh - 13, 40, 11, 'NEXT', { color: C.steel }, function () { Au.play('click'); Tut.next(); });
+    button(ctx, bx + bw - 42, by + bh - 13, 38, 11, 'SKIP', { color: C.dkgray2 }, function () { Au.play('click'); Tut.skip(); });
   }
 
   function drawIntro(ctx, t, app) {
@@ -515,6 +638,7 @@
     drawHUD: drawHUD, drawTabs: drawTabs, drawMuseumOverlay: drawMuseumOverlay,
     drawDigOverlay: drawDigOverlay, drawStorageOverlay: drawStorageOverlay, drawShop: drawShop,
     drawCollection: drawCollection, drawSites: drawSites, drawUpgrades: drawUpgrades,
+    drawStaff: drawStaff, drawQuests: drawQuests, drawTutorial: drawTutorial,
     drawIntro: drawIntro, drawOffline: drawOffline, drawToasts: drawToasts,
     fmt: fmt, displayName: displayName,
   };

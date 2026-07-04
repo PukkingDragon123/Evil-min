@@ -87,9 +87,9 @@
     ctx.fillRect(fr.x - 2, fr.y - 2, 2, fr.h + 4); ctx.fillRect(fr.x + fr.w, fr.y - 2, 2, fr.h + 4);
 
     // ceiling spotlights onto exhibits
-    const st = S.get();
-    for (let i = 0; i < st.museum.length; i++) {
-      const it = st.museum[i];
+    const spotM = S.curMuseum();
+    for (let i = 0; i < spotM.length; i++) {
+      const it = spotM[i];
       if (!D.fossilById(it.id)) continue;
       const fp = S.itemFootprint(it.id);
       const cx = M.originX + (it.cx + fp.w / 2) * M.CELL;
@@ -116,17 +116,21 @@
   }
 
   function drawMuseumEntities(ctx, t, placement) {
-    const st = S.get();
+    const museum = S.curMuseum();
     const list = [];
-    for (let i = 0; i < st.museum.length; i++) {
-      const it = st.museum[i];
+    for (let i = 0; i < museum.length; i++) {
+      const it = museum[i];
       const fp = S.itemFootprint(it.id);
       const feetY = M.originY + (it.cy + fp.h) * M.CELL;
       const cxpx = M.originX + (it.cx + fp.w / 2) * M.CELL;
       list.push({ y: feetY, kind: 'item', it: it, fp: fp, cx: cxpx });
     }
+    const trash = S.curTrash();
+    for (let i = 0; i < trash.length; i++) list.push({ y: trash[i].y, kind: 'trash', tr: trash[i], idx: i });
     const visitors = M.getVisitors();
     for (let i = 0; i < visitors.length; i++) list.push({ y: visitors[i].y, kind: 'vis', v: visitors[i] });
+    const staff = M.getStaff();
+    for (let i = 0; i < staff.length; i++) list.push({ y: staff[i].y, kind: 'staff', s: staff[i] });
     list.sort(function (a, b) { return a.y - b.y; });
 
     for (let i = 0; i < list.length; i++) {
@@ -148,21 +152,33 @@
           const sp = A.dig.sparkle[(t / 250 | 0) % 2];
           blit(ctx, sp, e.cx + Math.sin(t / 420 + e.cx) * 9, e.y - 42 + Math.cos(t / 300) * 4, 5, 1);
         }
+      } else if (e.kind === 'trash') {
+        const variant = (Math.abs(e.tr.x * 7 + e.tr.y * 13)) % A.trash.length;
+        const img = A.trash[variant];
+        ctx.drawImage(img, Math.round(e.tr.x - img.width / 2), Math.round(e.tr.y - img.height));
+      } else if (e.kind === 'staff') {
+        const s = e.s; const set = s.facing >= 0 ? A.staff[s.role].right : A.staff[s.role].left;
+        const img = set[s.frame]; const bob = Math.round(Math.sin(s.bob) * 0.5);
+        ctx.drawImage(A.shadows.s10, Math.round(s.x - 6), Math.round(s.y - 2));
+        ctx.drawImage(img, Math.round(s.x - img.width / 2), Math.round(s.y - img.height + bob));
       } else {
         const v = e.v;
-        const set = v.facing >= 0 ? A.visitors[v.variant].right : A.visitors[v.variant].left;
+        const sheet = v.vip ? A.vip : A.visitors[v.variant];
+        const set = v.facing >= 0 ? sheet.right : sheet.left;
         const img = set[v.frame];
         const bob = Math.round(Math.sin(v.bob) * 0.5);
+        if (v.vip) softGlow(ctx, v.x, v.y - 7, 11, C.gold, 0.22);
         ctx.drawImage(A.shadows.s10, Math.round(v.x - 5), Math.round(v.y - 2));
         ctx.drawImage(img, Math.round(v.x - img.width / 2), Math.round(v.y - img.height + bob));
+        if (v.vip) { const sp = A.dig.sparkle[(t / 220 | 0) % 2]; ctx.drawImage(sp, Math.round(v.x - 2), Math.round(v.y - img.height - 4)); }
       }
     }
 
     const pops = M.getPopups();
     for (let i = 0; i < pops.length; i++) {
-      const p = pops[i]; const a = 1 - p.life / 1200;
+      const p = pops[i]; const a = 1 - p.life / 1300;
       ctx.globalAlpha = Math.max(0, a);
-      Font.drawText(ctx, '+' + p.amount, p.x, p.y, C.yellow, { align: 1, shadow: C.maroon });
+      Font.drawText(ctx, (p.vip ? 'VIP +' : '+') + p.amount, p.x, p.y, p.vip ? C.gold : C.yellow, { align: 1, shadow: C.maroon, scale: p.vip ? 1 : 1 });
       ctx.globalAlpha = 1;
     }
 
@@ -193,9 +209,9 @@
     return { cx: cx, cy: cy };
   }
   function museumItemAt(cx, cy) {
-    const st = S.get();
-    for (let i = st.museum.length - 1; i >= 0; i--) {
-      const it = st.museum[i]; const fp = S.itemFootprint(it.id);
+    const m = S.curMuseum();
+    for (let i = m.length - 1; i >= 0; i--) {
+      const it = m[i]; const fp = S.itemFootprint(it.id);
       if (cx >= it.cx && cx < it.cx + fp.w && cy >= it.cy && cy < it.cy + fp.h) return i;
     }
     return -1;
