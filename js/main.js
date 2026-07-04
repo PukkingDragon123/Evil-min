@@ -222,9 +222,9 @@
   }
 
   // pointer wiring
-  canvas.addEventListener('mousedown', function (e) { const p = toLogical(e.clientX, e.clientY); onDown(p.x, p.y); });
+  canvas.addEventListener('mousedown', function (e) { if (e.button !== 0) return; const p = toLogical(e.clientX, e.clientY); onDown(p.x, p.y); });
   window.addEventListener('mousemove', function (e) { const p = toLogical(e.clientX, e.clientY); onMove(p.x, p.y); });
-  window.addEventListener('mouseup', function (e) { const p = toLogical(e.clientX, e.clientY); onUp(p.x, p.y); });
+  window.addEventListener('mouseup', function (e) { if (e.button !== 0) return; const p = toLogical(e.clientX, e.clientY); onUp(p.x, p.y); });
   canvas.addEventListener('contextmenu', function (e) {
     e.preventDefault(); const p = toLogical(e.clientX, e.clientY);
     if (app.tab === 'dig' && !app.modal && app.digLayout) {

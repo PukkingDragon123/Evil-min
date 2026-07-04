@@ -460,6 +460,7 @@
 
   function drawIntro(ctx, t, app) {
     ctx.fillStyle = 'rgba(12,11,22,0.9)'; ctx.fillRect(0, 0, VW, VH);
+    push(0, 0, VW, VH, function () {}); // swallow taps so HUD/tabs behind stay blocked
     const w = 384, h = 210, x = (VW - w) / 2, y = (VH - h) / 2;
     panel(ctx, x, y, w, h, '#232038', C.gold);
     Font.drawText(ctx, 'DINO DIG MUSEUM', x + w / 2, y + 10, C.cyan, { align: 1, scale: 2, shadow: C.maroon });

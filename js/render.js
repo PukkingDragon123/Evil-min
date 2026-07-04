@@ -139,7 +139,9 @@
           const rc = D.RARITY[fos.rarity];
           softGlow(ctx, e.cx, e.y - 18, 22, rc.glow, fos.rarity === 'legendary' ? 0.28 : (fos.rarity === 'epic' ? 0.2 : 0.13));
         }
-        const sh = fos ? A.shadows.s26 : (e.fp.w >= 2 ? A.shadows.s26 : (e.fp.w >= 2 ? A.shadows.s16 : A.shadows.s10));
+        const big = fos || (e.fp.w >= 2 && e.fp.h >= 2);
+        const wide = e.fp.w >= 2 || e.fp.h >= 2;
+        const sh = big ? A.shadows.s26 : (wide ? A.shadows.s16 : A.shadows.s10);
         ctx.drawImage(sh, Math.round(e.cx - sh.width / 2), Math.round(e.y - sh.height + 1));
         if (sprite) blitBottom(ctx, sprite, e.cx, e.y + 1, 1);
         if (fos && (fos.rarity === 'legendary' || fos.rarity === 'epic')) {
