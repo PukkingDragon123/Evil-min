@@ -1,393 +1,332 @@
 // ---------------------------------------------------------------------------
-// UI: HUD, tab bar, shop, fossil collection / assembly, dig header, site
-// picker, modals, toasts. Immediate-mode: draw() rebuilds a click registry
-// every frame; main.js routes taps through UI.handleTap().
+// UI (v2): HUD, 4-tab bar, dig/storage/museum overlays, category shop,
+// collection (species progress), sites, upgrades, modals and toasts.
+// Immediate-mode: draw() rebuilds a click registry; main routes via handleTap.
 // ---------------------------------------------------------------------------
 (function () {
   'use strict';
 
-  const A = window.Assets;
-  const C = A.C;
-  const S = window.GameState;
-  const D = window.GameData;
-  const R = window.Render;
-  const Au = window.Audio2;
-
+  const A = window.Assets, C = A.C, S = window.GameState, D = window.GameData;
+  const R = window.Render, Au = window.Audio2, U = window.Upgrades, Inv = window.Inventory, FX = window.FX;
   const VW = R.VW, VH = R.VH, HUD_H = R.HUD_H, TAB_H = R.TAB_H;
 
-  let buttons = [];       // {x,y,w,h,fn}
+  let buttons = [];
   let toasts = [];
-  let flash = 0;          // screen-flash timer (hazard)
-  let shake = 0;          // screen shake timer
 
   function reset() { buttons = []; }
   function push(x, y, w, h, fn) { buttons.push({ x: x, y: y, w: w, h: h, fn: fn }); }
-
   function handleTap(sx, sy) {
     for (let i = buttons.length - 1; i >= 0; i--) {
       const b = buttons[i];
-      if (sx >= b.x && sy >= b.y && sx < b.x + b.w && sy < b.y + b.h) {
-        if (b.fn) b.fn();
-        return true;
-      }
+      if (sx >= b.x && sy >= b.y && sx < b.x + b.w && sy < b.y + b.h) { if (b.fn) b.fn(); return true; }
     }
     return false;
   }
 
-  // --- toasts --------------------------------------------------------------
-  function toast(msg, color, icon) {
-    toasts.push({ msg: msg, color: color || C.white, icon: icon || null, life: 0, ttl: 2200 });
-    if (toasts.length > 4) toasts.shift();
+  function toast(msg, color, icon) { toasts.push({ msg: msg, color: color || C.white, icon: icon || null, life: 0, ttl: 2200 }); if (toasts.length > 5) toasts.shift(); }
+  function tickToasts(dt) { for (let i = toasts.length - 1; i >= 0; i--) { toasts[i].life += dt; if (toasts[i].life > toasts[i].ttl) toasts.splice(i, 1); } }
+
+  function fmt(n) {
+    n = Math.floor(n);
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + 'M';
+    if (n >= 10000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'K';
+    return String(n);
   }
-  function tickToasts(dt) {
-    for (let i = toasts.length - 1; i >= 0; i--) {
-      toasts[i].life += dt;
-      if (toasts[i].life > toasts[i].ttl) toasts.splice(i, 1);
-    }
-    if (flash > 0) flash -= dt;
-    if (shake > 0) shake -= dt;
-  }
-  function triggerHazard() { flash = 350; shake = 300; }
-  function shakeOffset() {
-    if (shake <= 0) return { x: 0, y: 0 };
-    const m = shake / 300 * 3;
-    return { x: (Math.random() * 2 - 1) * m, y: (Math.random() * 2 - 1) * m };
-  }
+  function displayName(id) { const f = D.fossilById(id); if (f) return f.name; const c = D.catalogById(id); return c ? c.name : id; }
 
   // --- primitives ----------------------------------------------------------
   function panel(ctx, x, y, w, h, fill, border) {
-    ctx.fillStyle = border || C.ink;
-    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-    ctx.fillStyle = fill || '#2b2740';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    ctx.fillRect(x, y, w, 1);
+    ctx.fillStyle = border || C.ink; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = fill || '#2b2740'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x, y, w, 1);
   }
-
   function button(ctx, x, y, w, h, label, opts, fn) {
     opts = opts || {};
     const enabled = opts.enabled !== false;
     let base = opts.color || C.steel;
     if (!enabled) base = C.dkgray2;
     if (opts.active) base = opts.activeColor || C.green;
-    ctx.fillStyle = C.ink;
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = base;
-    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
-    // bevel
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.fillRect(x + 1, y + 1, w - 2, 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
+    ctx.fillStyle = C.ink; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = base; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(x + 1, y + 1, w - 2, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x + 1, y + h - 2, w - 2, 1);
     if (opts.icon) {
-      R.blit(ctx, opts.icon, x + 10, y + h / 2, h - 6);
-      Font.drawText(ctx, label, x + 18, y + (h - 5) / 2 + 0.5, enabled ? C.white : C.gray, { shadow: C.ink });
+      R.blit(ctx, opts.icon, x + 9, y + h / 2, h - 6);
+      Font.drawText(ctx, label, x + 17, y + (h - 5) / 2 + 0.5, enabled ? C.white : C.gray, { shadow: C.ink });
     } else if (label) {
-      Font.drawText(ctx, label, x + w / 2, y + (h - 5) / 2 + 0.5, enabled ? C.white : C.gray,
-        { align: 1, shadow: C.ink, scale: opts.scale || 1 });
+      Font.drawText(ctx, label, x + w / 2, y + (h - 5 * (opts.scale || 1)) / 2 + 0.5, enabled ? C.white : C.gray, { align: 1, shadow: C.ink, scale: opts.scale || 1 });
     }
     if (enabled && fn) push(x, y, w, h, fn);
   }
-
   function costLabel(ctx, x, y, coins, gems, afford) {
     let cx = x;
-    if (coins) {
-      R.blit(ctx, A.icons.coin, cx + 4, y + 3, 8, 1);
-      Font.drawText(ctx, String(coins), cx + 10, y + 1, afford ? C.yellow : C.salmon, { shadow: C.ink });
-      cx += 12 + Font.textW(String(coins)) + 6;
-    }
-    if (gems) {
-      R.blit(ctx, A.icons.gem, cx + 3, y + 3, 7, 1);
-      Font.drawText(ctx, String(gems), cx + 9, y + 1, afford ? C.cyan : C.salmon, { shadow: C.ink });
-    }
+    if (coins) { R.blit(ctx, A.icons.coin, cx + 4, y + 3, 8, 1); Font.drawText(ctx, fmt(coins), cx + 10, y + 1, afford ? C.yellow : C.salmon, { shadow: C.ink }); cx += 12 + Font.textW(fmt(coins)) + 6; }
+    if (gems) { R.blit(ctx, A.icons.gem, cx + 3, y + 3, 7, 1); Font.drawText(ctx, String(gems), cx + 9, y + 1, afford ? C.cyan : C.salmon, { shadow: C.ink }); }
+  }
+  function stars(rc) { let s = ''; for (let i = 0; i < rc.stars; i++) s += '★'; return s; }
+  function progressBar(ctx, x, y, w, h, frac, col, bg) {
+    ctx.fillStyle = bg || '#0c0b16'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = col; ctx.fillRect(x, y, Math.round(w * Math.max(0, Math.min(1, frac))), h);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(x, y, Math.round(w * Math.max(0, Math.min(1, frac))), 1);
   }
 
   // =========================================================================
   // HUD
   // =========================================================================
   function drawHUD(ctx, t, app) {
-    const st = S.get();
-    const stats = S.computeStats();
-    // background
-    ctx.fillStyle = '#1b1930';
-    ctx.fillRect(0, 0, VW, HUD_H);
-    ctx.fillStyle = C.ink;
-    ctx.fillRect(0, HUD_H - 1, VW, 1);
-    // xp strip along the very top
-    const need = S.xpForLevel(st.level);
-    const xpFrac = Math.max(0, Math.min(1, st.xp / need));
-    ctx.fillStyle = '#0c0b16';
-    ctx.fillRect(0, 0, VW, 2);
-    ctx.fillStyle = C.gold;
-    ctx.fillRect(0, 0, Math.round(VW * xpFrac), 2);
-    ctx.fillStyle = C.yellow;
-    ctx.fillRect(0, 0, Math.round(VW * xpFrac), 1);
+    const st = S.get(); const stats = S.computeStats();
+    ctx.fillStyle = '#1b1930'; ctx.fillRect(0, 0, VW, HUD_H);
+    ctx.fillStyle = C.ink; ctx.fillRect(0, HUD_H - 1, VW, 1);
+    // xp strip
+    const need = S.xpForLevel(st.level); const xpFrac = Math.max(0, Math.min(1, st.xp / need));
+    ctx.fillStyle = '#0c0b16'; ctx.fillRect(0, 0, VW, 2);
+    ctx.fillStyle = C.gold; ctx.fillRect(0, 0, Math.round(VW * xpFrac), 2);
+    ctx.fillStyle = C.yellow; ctx.fillRect(0, 0, Math.round(VW * xpFrac), 1);
 
     const y = 6;
-    // coins
     R.blit(ctx, A.icons.coin, 12, y + 5, 12, 1);
     Font.drawText(ctx, fmt(st.coins), 22, y, C.yellow, { scale: 2, shadow: C.maroon });
-    // gems
-    let gx = 22 + Font.textW(fmt(st.coins), 2) + 18;
+    let gx = 22 + Font.textW(fmt(st.coins), 2) + 16;
     R.blit(ctx, A.icons.gem, gx, y + 5, 12, 1);
     Font.drawText(ctx, String(st.gems), gx + 8, y, C.cyan, { scale: 2, shadow: C.navy });
 
-    // energy (right-center)
-    const eMax = D.ENERGY_MAX;
-    const ex = 214, ew = 74;
+    // energy
+    const eMax = S.energyMax(); const ex = 206, ew = 66;
     R.blit(ctx, A.icons.pick, ex - 2, y + 6, 14, 1);
     ctx.fillStyle = C.ink; ctx.fillRect(ex + 12, y + 2, ew, 8);
     ctx.fillStyle = '#0c0b16'; ctx.fillRect(ex + 13, y + 3, ew - 2, 6);
     const efrac = st.energy / eMax;
-    ctx.fillStyle = st.energy > 0 ? C.lime : C.salmon;
-    ctx.fillRect(ex + 13, y + 3, Math.round((ew - 2) * efrac), 6);
-    // regen sliver
-    if (st.energy < eMax) {
-      const rf = st.energyTimer / D.ENERGY_REGEN_MS;
-      ctx.fillStyle = C.dkgreen;
-      ctx.fillRect(ex + 13 + Math.round((ew - 2) * efrac), y + 3, Math.max(1, Math.round((ew - 2) / eMax * rf)), 6);
-    }
+    ctx.fillStyle = st.energy > 0 ? C.lime : C.salmon; ctx.fillRect(ex + 13, y + 3, Math.round((ew - 2) * efrac), 6);
     Font.drawText(ctx, st.energy + '/' + eMax, ex + 12 + ew / 2, y + 3, C.white, { align: 1, shadow: C.ink });
-    // refill button
-    button(ctx, ex + 12 + ew + 4, y, 16, 12, '+', { color: C.purple, scale: 1 }, function () {
+    button(ctx, ex + 12 + ew + 3, y, 14, 12, '+', { color: C.purple }, function () {
       if (st.energy >= eMax) { toast('Energy full', C.lime); return; }
-      if (S.refillEnergy()) { Au.play('buy'); toast('Energy refilled!', C.lime); }
-      else { Au.play('error'); toast('Need ' + D.ENERGY_REFILL_GEM_COST + ' gems', C.salmon); }
+      if (S.refillEnergy()) { Au.play('buy'); toast('Energy refilled!', C.lime); } else { Au.play('error'); toast('Need ' + D.ENERGY_REFILL_GEM_COST + ' gems', C.salmon); }
     });
 
-    // right: level badge + mute
-    const lvx = VW - 108;
-    ctx.fillStyle = C.navy; ctx.fillRect(lvx, y - 1, 30, 14);
-    ctx.fillStyle = C.blue; ctx.fillRect(lvx + 1, y, 28, 12);
-    Font.drawText(ctx, 'LV', lvx + 4, y + 3, C.pale);
-    Font.drawText(ctx, String(st.level), lvx + 16, y + 2, C.white, { scale: 1 });
-    // visitors
-    R.blit(ctx, A.icons.gem, 0, 0, 1, 1); // noop keep ref
-    Font.drawText(ctx, '♥', VW - 70, y + 2, C.salmon);
-    Font.drawText(ctx, String(stats.visitors), VW - 62, y + 2, C.white);
-    // wonder
-    Font.drawText(ctx, '★', VW - 44, y + 2, C.yellow);
-    Font.drawText(ctx, String(stats.wonder), VW - 36, y + 2, C.white);
+    // level badge
+    const lvx = VW - 116;
+    ctx.fillStyle = C.navy; ctx.fillRect(lvx, y - 1, 28, 14);
+    ctx.fillStyle = C.blue; ctx.fillRect(lvx + 1, y, 26, 12);
+    Font.drawText(ctx, 'LV', lvx + 3, y + 3, C.pale); Font.drawText(ctx, String(st.level), lvx + 15, y + 3, C.white);
+    // visitors + wonder
+    Font.drawText(ctx, '♥', VW - 84, y + 2, C.salmon); Font.drawText(ctx, String(stats.visitors), VW - 76, y + 2, C.white);
+    Font.drawText(ctx, '★', VW - 58, y + 2, C.yellow); Font.drawText(ctx, fmt(stats.wonder), VW - 50, y + 2, C.white);
 
-    // mute
+    // gear (upgrades) + mute
+    button(ctx, VW - 32, y - 1, 14, 14, '*', { color: C.teal }, function () { Au.play('click'); app.openModal('upgrades'); });
     button(ctx, VW - 16, y - 1, 14, 14, Au.isMuted() ? 'x' : '=', { color: Au.isMuted() ? C.dkgray2 : C.teal }, function () {
-      Au.setMuted(!Au.isMuted());
-      S.get().muted = Au.isMuted();
-      S.saveSoon();
-      Au.play('click');
+      Au.setMuted(!Au.isMuted()); S.get().muted = Au.isMuted(); S.saveSoon(); Au.play('click');
     });
-  }
-
-  function fmt(n) {
-    n = Math.floor(n);
-    if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
-    if (n >= 10000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'K';
-    return String(n);
   }
 
   // =========================================================================
   // TAB BAR
   // =========================================================================
   const TABS = [
+    { id: 'dig', label: 'DIG', icon: 'pick' },
+    { id: 'storage', label: 'STORAGE', icon: 'grid' },
     { id: 'museum', label: 'MUSEUM', icon: 'tabMuseum' },
-    { id: 'dig', label: 'DIG SITE', icon: 'pick' },
     { id: 'shop', label: 'SHOP', icon: 'tabShop' },
   ];
-
   function drawTabs(ctx, t, app) {
     const ty = VH - TAB_H;
-    ctx.fillStyle = '#1b1930';
-    ctx.fillRect(0, ty, VW, TAB_H);
-    ctx.fillStyle = C.ink;
-    ctx.fillRect(0, ty, VW, 1);
+    ctx.fillStyle = '#1b1930'; ctx.fillRect(0, ty, VW, TAB_H);
+    ctx.fillStyle = C.ink; ctx.fillRect(0, ty, VW, 1);
     const tw = VW / TABS.length;
     for (let i = 0; i < TABS.length; i++) {
-      const x = i * tw;
-      const active = app.tab === TABS[i].id;
-      if (active) {
-        ctx.fillStyle = C.steel;
-        ctx.fillRect(x + 2, ty + 2, tw - 4, TAB_H - 2);
-        ctx.fillStyle = C.cyan;
-        ctx.fillRect(x + 2, ty + 2, tw - 4, 2);
+      const x = i * tw, active = app.tab === TABS[i].id;
+      if (active) { ctx.fillStyle = C.steel; ctx.fillRect(x + 2, ty + 2, tw - 4, TAB_H - 2); ctx.fillStyle = C.cyan; ctx.fillRect(x + 2, ty + 2, tw - 4, 2); }
+      const iconX = x + tw / 2 - 26;
+      if (TABS[i].icon === 'grid') { drawGridIcon(ctx, iconX - 4, ty + TAB_H / 2 - 5, active); }
+      else R.blit(ctx, A.icons[TABS[i].icon], iconX, ty + TAB_H / 2, 14, 1);
+      Font.drawText(ctx, TABS[i].label, x + tw / 2 + 6, ty + TAB_H / 2 - 3, active ? C.white : C.ltgray, { align: 1, shadow: C.ink });
+      // storage badge
+      if (TABS[i].id === 'storage') {
+        const q = S.get().queue.length;
+        if (q > 0) { ctx.fillStyle = C.red; ctx.fillRect(x + tw - 18, ty + 4, 12, 9); Font.drawText(ctx, String(q), x + tw - 12, ty + 5, C.white, { align: 1 }); }
       }
-      const icon = A.icons[TABS[i].icon];
-      R.blit(ctx, icon, x + tw / 2 - 22, ty + TAB_H / 2, 14, 1);
-      Font.drawText(ctx, TABS[i].label, x + tw / 2 + 4, ty + TAB_H / 2 - 3, active ? C.white : C.ltgray,
-        { align: 1, shadow: C.ink });
-      (function (id) {
-        push(x, ty, tw, TAB_H, function () {
-          if (app.tab !== id) { Au.play('tab'); app.setTab(id); }
-        });
-      })(TABS[i].id);
+      (function (id) { push(x, ty, tw, TAB_H, function () { if (app.tab !== id) { Au.play('tab'); app.setTab(id); } }); })(TABS[i].id);
     }
+  }
+  function drawGridIcon(ctx, x, y, active) {
+    ctx.fillStyle = active ? C.cream : C.ltgray;
+    for (let gy = 0; gy < 3; gy++) for (let gx = 0; gx < 3; gx++) ctx.fillRect(x + gx * 4, y + gy * 4, 3, 3);
   }
 
   // =========================================================================
-  // MUSEUM overlay (buttons: Fossils / Edit; edit popover)
+  // MUSEUM overlay
   // =========================================================================
   function drawMuseumOverlay(ctx, t, app) {
     const stats = S.computeStats();
-    // top-left status ribbon
-    panel(ctx, 4, HUD_H + 4, 142, 26, 'rgba(27,25,48,0.85)');
+    panel(ctx, 4, HUD_H + 4, 148, 26, 'rgba(27,25,48,0.85)');
     Font.drawText(ctx, 'DINO DIG MUSEUM', 10, HUD_H + 8, C.cyan, { shadow: C.ink });
     Font.drawText(ctx, 'Exhibits ' + stats.exhibits, 10, HUD_H + 17, C.pale);
-    Font.drawText(ctx, '+' + stats.cps.toFixed(1) + '/s', 142, HUD_H + 17, C.yellow, { align: 2 });
+    Font.drawText(ctx, '+' + stats.cps.toFixed(1) + '/s', 148, HUD_H + 17, C.yellow, { align: 2 });
 
-    // right-side action buttons
-    const bx = VW - 66, bw = 62;
-    button(ctx, bx, HUD_H + 4, bw, 15, 'FOSSILS', { color: C.purple, icon: A.icons.bone }, function () {
-      Au.play('click'); app.openModal('collection');
-    });
-    button(ctx, bx, HUD_H + 22, bw, 15, app.editMode ? 'DONE' : 'ARRANGE',
-      { color: app.editMode ? C.green : C.steel }, function () {
-        Au.play('click');
-        app.editMode = !app.editMode;
-        app.selectedItem = -1;
-        if (app.editMode) toast('Tap an exhibit to move or sell', C.cyan);
-      });
+    const bx = VW - 66;
+    button(ctx, bx, HUD_H + 4, 62, 15, 'FOSSILS', { color: C.purple, icon: A.icons.bone }, function () { Au.play('click'); app.openModal('collection'); });
+    button(ctx, bx, HUD_H + 22, 62, 15, app.editMode ? 'DONE' : 'ARRANGE', { color: app.editMode ? C.green : C.steel }, function () { Au.play('click'); app.editMode = !app.editMode; app.selectedItem = -1; if (app.editMode) toast('Tap an exhibit to move or sell', C.cyan); });
 
-    // placement mode banner
     if (app.placement) {
-      panel(ctx, VW / 2 - 90, VH - TAB_H - 22, 180, 18, 'rgba(27,25,48,0.92)');
-      Font.drawText(ctx, 'Tap a spot to place. ', VW / 2 - 82, VH - TAB_H - 17, C.white);
-      button(ctx, VW / 2 + 44, VH - TAB_H - 21, 44, 16, 'CANCEL', { color: C.red }, function () {
-        Au.play('click'); app.cancelPlacement();
-      });
+      panel(ctx, VW / 2 - 92, VH - TAB_H - 22, 184, 18, 'rgba(27,25,48,0.92)');
+      Font.drawText(ctx, 'Tap a spot to place.', VW / 2 - 84, VH - TAB_H - 17, C.white);
+      button(ctx, VW / 2 + 46, VH - TAB_H - 21, 44, 16, 'CANCEL', { color: C.red }, function () { Au.play('click'); app.cancelPlacement(); });
     }
 
-    // edit popover for selected item
     if (app.editMode && app.selectedItem >= 0) {
-      const st = S.get();
-      const it = st.museum[app.selectedItem];
+      const st = S.get(); const it = st.museum[app.selectedItem];
       if (it) {
-        const fp = S.itemFootprint(it.id);
-        const px = M.px(it.cx, it.cy);
-        let popX = px.x, popY = px.y - 26;
+        const fp = S.itemFootprint(it.id); const px = window.Museum.cellToPx(it.cx, it.cy);
+        let popX = Math.max(4, Math.min(VW - 100, px.x)); let popY = px.y - 26;
         if (popY < HUD_H + 2) popY = px.y + fp.h * window.Museum.CELL + 2;
-        popX = Math.max(4, Math.min(VW - 100, popX));
         panel(ctx, popX, popY, 96, 22, '#1b1930');
-        const nm = displayName(it.id);
-        Font.drawText(ctx, nm, popX + 4, popY + 3, C.white);
-        button(ctx, popX + 2, popY + 11, 44, 9, 'MOVE', { color: C.steel }, function () {
-          Au.play('click');
-          app.startMove(app.selectedItem);
-        });
-        button(ctx, popX + 48, popY + 11, 46, 9, 'SELL', { color: C.red }, function () {
-          Au.play('coin');
-          app.sellItem(app.selectedItem);
-        });
+        Font.drawText(ctx, displayName(it.id), popX + 4, popY + 3, C.white);
+        button(ctx, popX + 2, popY + 11, 44, 9, 'MOVE', { color: C.steel }, function () { Au.play('click'); app.startMove(app.selectedItem); });
+        button(ctx, popX + 48, popY + 11, 46, 9, 'SELL', { color: C.red }, function () { Au.play('coin'); app.sellItem(app.selectedItem); });
       }
     }
   }
 
-  const M = { px: function (cx, cy) { return window.Museum.cellToPx(cx, cy); } };
-
-  function displayName(id) {
-    const f = D.fossilById(id); if (f) return f.name;
-    const c = D.catalogById(id); if (c) return c.name;
-    return id;
-  }
-
   // =========================================================================
-  // DIG overlay (header + flag toggle + sites + new section)
+  // DIG overlay
   // =========================================================================
   function drawDigOverlay(ctx, t, app, board, site) {
-    // header bar
     panel(ctx, 4, HUD_H + 3, VW - 8, 22, 'rgba(27,25,48,0.9)');
-    Font.drawText(ctx, site.name.toUpperCase(), 10, HUD_H + 7, C.cyan, { shadow: C.ink });
-    const remaining = window.Dig.remainingSafe(board);
-    const flags = window.Dig.flagCount(board);
-    Font.drawText(ctx, 'Buried ' + remaining, 10, HUD_H + 16, C.pale);
-    R.blit(ctx, A.icons.flag, 66, HUD_H + 18, 8, 1);
-    Font.drawText(ctx, flags + '/' + board.hazards, 74, HUD_H + 16, C.salmon);
+    const biome = D.BIOMES[site.biome];
+    Font.drawText(ctx, site.name.toUpperCase(), 10, HUD_H + 6, C.cyan, { shadow: C.ink });
+    const depth = window.Dig.depthOf(site);
+    ctx.fillStyle = biome.accent; ctx.fillRect(10, HUD_H + 15, 3, 7);
+    Font.drawText(ctx, 'DEPTH ' + depth + '  ' + biome.name, 16, HUD_H + 16, C.pale);
+    const left = window.Dig.nodesLeft(board);
+    Font.drawText(ctx, 'Treasures left: ' + left, 130, HUD_H + 6, C.yellow);
+    R.blit(ctx, A.icons.flag, 130, HUD_H + 18, 8, 1);
+    Font.drawText(ctx, String(window.Dig.flagCount(board)), 138, HUD_H + 16, C.salmon);
 
-    // sites button
-    button(ctx, VW - 52, HUD_H + 5, 46, 8, 'SITES', { color: C.purple }, function () {
-      Au.play('click'); app.openModal('sites');
-    });
-    // flag mode toggle
-    button(ctx, VW - 104, HUD_H + 5, 48, 8, app.flagMode ? 'FLAG ON' : 'FLAG',
-      { color: app.flagMode ? C.orange : C.steel, active: app.flagMode }, function () {
-        Au.play('click'); app.flagMode = !app.flagMode;
+    // mode toggle
+    button(ctx, VW - 154, HUD_H + 5, 66, 8, app.digMode === 'survey' ? 'SURVEY' : 'EXCAVATE',
+      { color: app.digMode === 'survey' ? C.steel : C.orange, active: app.digMode === 'excavate' }, function () {
+        Au.play('click'); app.digMode = app.digMode === 'survey' ? 'excavate' : 'survey';
       });
-    // new section (only when cleared)
+    button(ctx, VW - 52, HUD_H + 5, 46, 8, 'SITES', { color: C.purple }, function () { Au.play('click'); app.openModal('sites'); });
+
     if (window.Dig.isCleared(board)) {
-      button(ctx, VW - 104, HUD_H + 15, 98, 9, 'DIG NEW SECTION', { color: C.green }, function () {
-        Au.play('newarea');
-        app.regenSite();
-        toast('Fresh dirt to excavate!', C.lime);
+      button(ctx, VW - 154, HUD_H + 15, 148, 9, 'DIG DEEPER >>', { color: C.green }, function () {
+        const d = window.Dig.descend(site); Au.play('newarea'); FX.confetti(VW / 2, HUD_H + 40, 30); toast('Descending to depth ' + d + '!', C.lime);
       });
     } else {
-      Font.drawText(ctx, app.flagMode ? 'Tap = flag' : 'Tap = dig  (hold = flag)', VW - 104, HUD_H + 16, C.gray);
+      Font.drawText(ctx, app.digMode === 'survey' ? 'Tap: survey (reveals clues)' : 'Tap: send dig team (hold=flag)', VW - 154, HUD_H + 16, C.gray);
     }
 
-    // out-of-energy hint
     if (S.get().energy <= 0) {
-      panel(ctx, VW / 2 - 80, VH - TAB_H - 24, 160, 20, 'rgba(90,37,48,0.95)');
-      Font.drawText(ctx, 'Out of energy! Refill or wait.', VW / 2, VH - TAB_H - 18, C.white, { align: 1 });
+      panel(ctx, VW / 2 - 82, VH - TAB_H - 22, 164, 18, 'rgba(90,37,48,0.95)');
+      Font.drawText(ctx, 'Out of energy! Refill or wait.', VW / 2, VH - TAB_H - 17, C.white, { align: 1 });
     }
   }
 
   // =========================================================================
-  // SHOP
+  // STORAGE overlay
   // =========================================================================
-  function drawShop(ctx, t, app) {
-    ctx.fillStyle = '#232038';
-    ctx.fillRect(0, HUD_H, VW, R.CONTENT.h);
-    Font.drawText(ctx, 'BUILD & DECORATE', VW / 2, HUD_H + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
-    Font.drawText(ctx, 'Tap an item, then place it in your museum', VW / 2, HUD_H + 22, C.pale, { align: 1 });
-
+  function drawStorageOverlay(ctx, t, app) {
     const st = S.get();
-    const cols = 3, cw = 150, ch = 56, gap = 6;
-    const gridW = cols * cw + (cols - 1) * gap;
-    const startX = (VW - gridW) / 2;
-    const startY = HUD_H + 34;
-    for (let i = 0; i < D.CATALOG.length; i++) {
-      const item = D.CATALOG[i];
+    const px = 232, pw = VW - px - 8;
+    panel(ctx, px, HUD_H + 4, pw, 100, 'rgba(27,25,48,0.92)', C.gold);
+    Font.drawText(ctx, 'FIELD STORAGE', px + pw / 2, HUD_H + 8, C.cyan, { align: 1, shadow: C.ink });
+    Font.drawText(ctx, 'Fit blocks in; clear full', px + 6, HUD_H + 18, C.pale);
+    Font.drawText(ctx, 'rows/columns to bank them.', px + 6, HUD_H + 26, C.pale);
+
+    const active = st.queue[app.activePiece];
+    const ay = HUD_H + 36;
+    if (active) {
+      const f = D.fossilById(active.fossilId); const rc = D.RARITY[active.rarity];
+      Font.drawText(ctx, 'NEXT BLOCK:', px + 6, ay, C.gold);
+      // preview
+      const b = R.bounds(active.cells); const cs = 8;
+      const pxo = px + 8, pyo = ay + 10;
+      panel(ctx, pxo - 2, pyo - 2, b.w * cs + 4, b.h * cs + 4, '#14121f', rc.color);
+      R.drawPieceCells(ctx, active.cells, pxo, pyo, cs, active.rarity, 1);
+      Font.drawText(ctx, f ? f.name : '?', pxo + b.w * cs + 8, ay + 10, rc.color, { shadow: C.ink });
+      Font.drawText(ctx, stars(rc) + (active.pristine ? '' : ' (chipped)'), pxo + b.w * cs + 8, ay + 20, active.pristine ? rc.color : C.gray);
+      Font.drawText(ctx, active.cells.length + ' cells', pxo + b.w * cs + 8, ay + 30, C.pale);
+    } else {
+      Font.drawText(ctx, 'Queue empty - go dig!', px + pw / 2, ay + 14, C.gray, { align: 1 });
+    }
+    // buttons
+    const by = HUD_H + 76;
+    button(ctx, px + 4, by, (pw - 12) / 2, 12, 'SKIP', { color: C.steel, enabled: st.queue.length > 1 }, function () {
+      app.activePiece = (app.activePiece + 1) % Math.max(1, st.queue.length); Au.play('click');
+    });
+    button(ctx, px + 8 + (pw - 12) / 2, by, (pw - 12) / 2, 12, 'DISCARD', { color: C.red, enabled: !!active }, function () {
+      S.removeQueue(app.activePiece); if (app.activePiece >= st.queue.length) app.activePiece = Math.max(0, st.queue.length - 1); Au.play('unflag'); toast('Block discarded', C.gray);
+    });
+    button(ctx, px + 4, by + 14, pw - 8, 12, 'SHIP ALL (60%)', { color: C.orange, enabled: Inv.occupied() > 0 }, function () {
+      const r = Inv.shipAll(); if (r.count > 0) { Au.play('buy'); FX.floatText(120, VH / 2, '+' + r.coins, C.yellow, { scale: 2 }); toast('Shipped ' + r.count + ' cells for ' + r.coins + 'c', C.yellow); }
+    });
+
+    // queue strip along the bottom
+    const qy = VH - TAB_H - 20;
+    Font.drawText(ctx, 'QUEUE ' + st.queue.length + '/' + S.queueCap(), 232, qy - 8, C.gold);
+    for (let i = 0; i < st.queue.length && i < 8; i++) {
+      const q = st.queue[i]; const rc = D.RARITY[q.rarity];
+      const qx = 232 + i * 30;
+      const on = i === app.activePiece;
+      panel(ctx, qx, qy, 26, 18, on ? '#3a3556' : '#1b1930', on ? C.cyan : rc.color);
+      R.drawPieceCells(ctx, q.cells, qx + 3, qy + 3, 3, q.rarity, 1);
+      (function (idx) { push(qx, qy, 26, 18, function () { app.activePiece = idx; Au.play('click'); }); })(i);
+    }
+    // occupancy + stuck warning
+    const occ = Inv.occupied(), tot = Inv.size() * Inv.size();
+    Font.drawText(ctx, 'Grid ' + occ + '/' + tot, 8, VH - TAB_H - 10, C.pale);
+    if (active && !Inv.hasAnyMove(active)) {
+      Font.drawText(ctx, 'No room! Clear a line or SHIP ALL.', 8, VH - TAB_H - 20, C.salmon);
+    }
+  }
+
+  // =========================================================================
+  // SHOP (category tabs)
+  // =========================================================================
+  const SHOP_CATS = [{ id: 'nature', label: 'NATURE' }, { id: 'decor', label: 'DECOR' }, { id: 'facility', label: 'FACILITIES' }];
+  function drawShop(ctx, t, app) {
+    ctx.fillStyle = '#232038'; ctx.fillRect(0, HUD_H, VW, R.CONTENT.h);
+    Font.drawText(ctx, 'BUILD & DECORATE', VW / 2, HUD_H + 5, C.cyan, { align: 1, scale: 2, shadow: C.ink });
+    // category tabs
+    const cw = 120, cx0 = (VW - cw * SHOP_CATS.length) / 2;
+    for (let i = 0; i < SHOP_CATS.length; i++) {
+      const x = cx0 + i * cw; const on = app.shopCat === SHOP_CATS[i].id;
+      button(ctx, x + 2, HUD_H + 18, cw - 4, 12, SHOP_CATS[i].label, { color: on ? C.teal : C.dkgray2, active: on }, function () { app.shopCat = SHOP_CATS[i].id; Au.play('tab'); });
+    }
+
+    const items = D.CATALOG.filter(function (c) { return c.cat === app.shopCat; });
+    const st = S.get();
+    const cols = 3, cwid = 150, ch = 52, gap = 6;
+    const gridW = cols * cwid + (cols - 1) * gap;
+    const startX = (VW - gridW) / 2, startY = HUD_H + 34;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       const col = i % cols, row = (i / cols) | 0;
-      const x = startX + col * (cw + gap);
-      const y = startY + row * (ch + gap);
-      const owned = st.owned[item.id] || 0;
-      const cost = D.scaledCost(item.cost, owned);
+      const x = startX + col * (cwid + gap), y = startY + row * (ch + gap);
+      const owned = st.owned[item.id] || 0, cost = D.scaledCost(item.cost, owned);
       const afford = S.canAfford(cost, item.gems || 0);
-
-      panel(ctx, x, y, cw, ch, afford ? '#2b2740' : '#241f30', item.kind === 'facility' ? C.teal : C.ink);
-      // preview sprite
-      const spr = itemPreview(item, t);
-      if (spr) R.blit(ctx, spr, x + 24, y + 26, 40);
-      // kind tag
-      ctx.fillStyle = item.kind === 'facility' ? C.teal : C.purple;
-      ctx.fillRect(x + 44, y + 4, item.kind === 'facility' ? 44 : 30, 8);
-      Font.drawText(ctx, item.kind === 'facility' ? 'FACILITY' : 'DECOR', x + 46, y + 5, C.white);
-      // name + desc
-      Font.drawText(ctx, item.name, x + 44, y + 15, C.white, { shadow: C.ink });
-      Font.drawTextWrapped(ctx, item.desc, x + 44, y + 24, cw - 50, C.ltgray);
-      // benefit line
+      panel(ctx, x, y, cwid, ch, afford ? '#2b2740' : '#241f30', item.kind === 'facility' ? C.teal : C.ink);
+      const spr = itemPreview(item, t); if (spr) R.blit(ctx, spr, x + 22, y + 26, 38);
+      Font.drawText(ctx, item.name, x + 44, y + 4, C.white, { shadow: C.ink });
+      Font.drawTextWrapped(ctx, item.desc, x + 44, y + 13, cwid - 48, C.ltgray);
       let ben = [];
-      if (item.wonder) ben.push('+' + item.wonder + ' wonder');
-      if (item.income) ben.push('+' + item.income + '/s');
-      if (item.comfort) ben.push('+' + item.comfort + ' comfort');
-      Font.drawText(ctx, ben.join('  '), x + 44, y + ch - 16, C.lime);
-      // cost + owned
+      if (item.wonder) ben.push('+' + item.wonder + '★'); if (item.income) ben.push('+' + item.income + '/s'); if (item.comfort) ben.push('+' + item.comfort + '♥');
+      Font.drawText(ctx, ben.join(' '), x + 44, y + ch - 17, C.lime);
       costLabel(ctx, x + 44, y + ch - 9, cost, item.gems || 0, afford);
-      if (owned > 0) Font.drawText(ctx, 'x' + owned, x + cw - 4, y + 4, C.gold, { align: 2 });
-
+      if (owned > 0) Font.drawText(ctx, 'x' + owned, x + cwid - 4, y + 4, C.gold, { align: 2 });
       (function (item, cost) {
-        push(x, y, cw, ch, function () {
+        push(x, y, cwid, ch, function () {
           if (!S.canAfford(cost, item.gems || 0)) { Au.play('error'); toast('Not enough ' + (S.get().coins < cost ? 'coins' : 'gems'), C.salmon); return; }
-          Au.play('click');
-          app.beginPlacement(item.id, cost, item.gems || 0);
-          toast('Placing ' + item.name + '...', C.cyan);
+          Au.play('click'); app.beginPlacement(item.id, cost, item.gems || 0); toast('Placing ' + item.name + '...', C.cyan);
         });
       })(item, cost);
     }
   }
-
   function itemPreview(item, t) {
-    if (item.anim && A.objects[item.sprite] && A.objects[item.sprite].length) {
-      return A.objects[item.sprite][(t / 380 | 0) % A.objects[item.sprite].length];
-    }
     const o = A.objects[item.sprite];
+    if (item.anim && o && o.length) return o[(t / 360 | 0) % o.length];
     if (o && o.length) return o[0];
     return o;
   }
@@ -395,220 +334,150 @@
   // =========================================================================
   // MODALS
   // =========================================================================
-  function modalBackdrop(ctx, app) {
-    ctx.fillStyle = 'rgba(12,11,22,0.72)';
-    ctx.fillRect(0, 0, VW, VH);
-    // tapping backdrop closes (registered last-ish; inner buttons override)
-    push(0, 0, VW, VH, function () { Au.play('click'); app.closeModal(); });
+  function modalBackdrop(ctx, app) { ctx.fillStyle = 'rgba(12,11,22,0.74)'; ctx.fillRect(0, 0, VW, VH); push(0, 0, VW, VH, function () { Au.play('click'); app.closeModal(); }); }
+  function scrollClip(ctx, app, x, y, w, h, contentH) {
+    app.scrollMax = Math.max(0, contentH - h);
+    if (app.scrollMax > 0) {
+      const sbh = Math.max(16, h * h / contentH), sby = y + (app.scrollY / app.scrollMax) * (h - sbh);
+      ctx.fillStyle = C.dkgray2; ctx.fillRect(x + w + 1, y, 3, h);
+      ctx.fillStyle = C.ltgray; ctx.fillRect(x + w + 1, sby, 3, sbh);
+    }
+    app.scrollRegion = { x: x, y: y, w: w + 6, h: h };
   }
 
   function drawCollection(ctx, t, app) {
     modalBackdrop(ctx, app);
-    const w = 420, h = 218, x = (VW - w) / 2, y = (VH - h) / 2;
+    const w = 430, h = 220, x = (VW - w) / 2, y = (VH - h) / 2;
     panel(ctx, x, y, w, h, '#232038', C.gold);
     Font.drawText(ctx, 'FOSSIL COLLECTION', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
     button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
-
-    // scroll viewport
-    const vx = x + 6, vy = y + 22, vw = w - 12, vh = h - 28;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
-
-    const rowH = 34;
-    let cy = vy - app.scrollY;
-    const st = S.get();
-
-    // fossils
-    for (let i = 0; i < D.FOSSILS.length; i++) {
-      const f = D.FOSSILS[i];
-      drawFossilRow(ctx, f, vx, cy, vw, rowH, app);
-      cy += rowH + 3;
-    }
-    // ores header
-    Font.drawText(ctx, 'ORE & GEMS  (tap to sell)', vx + 4, cy + 2, C.gold, { shadow: C.ink });
-    cy += 12;
-    for (let i = 0; i < D.ORES.length; i++) {
-      const o = D.ORES[i];
-      drawOreRow(ctx, o, vx, cy, vw, app);
-      cy += 20;
-    }
-
+    const vx = x + 6, vy = y + 22, vw = w - 14, vh = h - 28;
+    ctx.save(); ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
+    const rowH = 30; let cy = vy - app.scrollY;
+    for (let i = 0; i < D.FOSSILS.length; i++) { drawFossilRow(ctx, D.FOSSILS[i], vx, cy, vw, rowH, app); cy += rowH + 3; }
     ctx.restore();
-    // scrollbar
-    const contentH = D.FOSSILS.length * (rowH + 3) + 12 + D.ORES.length * 20 + 6;
-    app.scrollMax = Math.max(0, contentH - vh);
-    if (app.scrollMax > 0) {
-      const sbh = Math.max(16, vh * vh / contentH);
-      const sby = vy + (app.scrollY / app.scrollMax) * (vh - sbh);
-      ctx.fillStyle = C.dkgray2; ctx.fillRect(x + w - 5, vy, 3, vh);
-      ctx.fillStyle = C.ltgray; ctx.fillRect(x + w - 5, sby, 3, sbh);
-    }
-    // register scroll region for main to drag
-    app.scrollRegion = { x: vx, y: vy, w: vw, h: vh };
+    scrollClip(ctx, app, vx, vy, vw, vh, D.FOSSILS.length * (rowH + 3));
   }
-
   function drawFossilRow(ctx, f, x, y, w, h, app) {
-    if (y + h < HUD_H || y > VH) return; // cull
-    const st = S.get();
-    const rc = D.RARITY[f.rarity];
+    if (y + h < HUD_H || y > VH) return;
+    const st = S.get(); const rc = D.RARITY[f.rarity];
     panel(ctx, x, y, w, h, '#2b2740', rc.color);
-    // rarity stripe
     ctx.fillStyle = rc.color; ctx.fillRect(x, y, 3, h);
-    // skeleton mini
-    const skel = A.exhibits[f.id];
-    R.blit(ctx, skel, x + 24, y + h / 2, h - 4, 1);
-    // name + stars
-    Font.drawText(ctx, f.name, x + 46, y + 4, C.white, { shadow: C.ink });
-    let starsStr = '';
-    for (let s = 0; s < rc.stars; s++) starsStr += '★';
-    Font.drawText(ctx, starsStr, x + 46, y + 13, rc.color);
-    Font.drawText(ctx, rc.name + '  +' + f.income + '/s', x + 46 + Font.textW(starsStr) + 6, y + 13, C.pale);
-    // mounted count
-    const mounted = st.mounted[f.id] || 0;
-    const placed = countPlaced(f.id);
-    Font.drawText(ctx, 'Mounted ' + (mounted + placed), x + 46, y + 22, C.lime);
+    R.blit(ctx, A.exhibits[f.id], x + 22, y + h / 2, h - 2, 1);
+    Font.drawText(ctx, f.name, x + 44, y + 3, C.white, { shadow: C.ink });
+    Font.drawText(ctx, stars(rc), x + 44, y + 12, rc.color);
+    Font.drawText(ctx, f.period + '  +' + f.income + '/s', x + 44 + Font.textW(stars(rc)) + 6, y + 12, C.pale);
+    const mounted = (st.mounted[f.id] || 0) + countPlaced(f.id);
+    Font.drawText(ctx, 'On display: ' + mounted, x + 44, y + 21, C.lime);
 
-    // piece progress (skull/body/legs/tail) — four labelled slots
-    const boxW = 24, boxGap = 3, py0 = y + 3;
-    const clusterW = 4 * boxW + 3 * boxGap;
-    const px0 = x + w - clusterW - 6;
-    const PLBL = ['SKL', 'RIB', 'LEG', 'TAL'];
-    for (let p = 0; p < D.PIECES.length; p++) {
-      const piece = D.PIECES[p];
-      const have = S.pieceCount(f.id, piece);
-      const bx = px0 + p * (boxW + boxGap);
-      ctx.fillStyle = have > 0 ? C.dkgreen : C.ink;
-      ctx.fillRect(bx, py0, boxW, 12);
-      ctx.fillStyle = have > 0 ? C.green : '#0c0b16';
-      ctx.fillRect(bx + 1, py0 + 1, boxW - 2, 10);
-      R.blit(ctx, have > 0 ? A.pieces[piece] : A.piecesDark[piece], bx + boxW / 2 - 3, py0 + 6, 11, 1);
-      if (have > 0) Font.drawText(ctx, 'x' + have, bx + boxW - 2, py0 + 1, C.yellow, { align: 2 });
-      Font.drawText(ctx, PLBL[p], bx + boxW / 2, py0 + 13, have > 0 ? C.pale : C.gray, { align: 1 });
-    }
+    // progress toward next mount
+    const prog = S.speciesOf(f.id), need = S.mountThreshold(f.id);
+    const barX = x + w - 176, barW = 110;
+    Font.drawText(ctx, 'FOSSIL', barX, y + 3, C.gold);
+    progressBar(ctx, barX, y + 11, barW, 8, prog / need, rc.color);
+    Font.drawText(ctx, prog + '/' + need, barX + barW / 2, y + 12, C.white, { align: 1 });
 
-    // mount button (spans the slot cluster, below the slots)
-    const canM = S.canAssemble(f.id);
-    button(ctx, px0, y + h - 10, clusterW, 9, canM ? 'MOUNT SKELETON!' : 'NEED ALL 4 PIECES',
-      { color: canM ? C.green : C.dkgray2, enabled: canM }, function () {
-        if (S.assemble(f.id)) {
-          const cell = S.findFreeCell(f.id);
-          if (cell) {
-            S.placeItem(f.id, cell.cx, cell.cy);
-            Au.play('complete');
-            S.addXp(30 + rc.stars * 20);
-            toast(f.name + ' mounted! ' + starsStr, rc.color);
-            app.closeModal();
-            app.setTab('museum');
-            app.celebrate(f.id);
-          } else {
-            // no room — keep as unplaced mounted (rare)
-            Au.play('complete');
-            toast('Mounted (no floor space!)', C.orange);
-          }
-        }
-      });
+    const canM = S.canMount(f.id);
+    button(ctx, x + w - 60, y + 6, 56, h - 12, canM ? 'MOUNT!' : 'DIG MORE', { color: canM ? C.green : C.dkgray2, enabled: canM }, function () {
+      if (S.mount(f.id)) {
+        const cell = S.findFreeCell(f.id);
+        if (cell) { S.placeItem(f.id, cell.cx, cell.cy); Au.play('complete'); S.addXp(30 + rc.stars * 20); toast(f.name + ' mounted! ' + stars(rc), rc.color); app.closeModal(); app.setTab('museum'); app.celebrate(f.id); }
+        else { Au.play('complete'); toast('Mounted (no floor space!)', C.orange); }
+      }
+    });
   }
-
-  function countPlaced(id) {
-    const st = S.get();
-    let n = 0;
-    for (let i = 0; i < st.museum.length; i++) if (st.museum[i].id === id) n++;
-    return n;
-  }
-
-  function drawOreRow(ctx, o, x, y, w, app) {
-    if (y + 18 < HUD_H || y > VH) return;
-    const st = S.get();
-    const count = st.ores[o.id] || 0;
-    const rc = D.RARITY[o.rarity];
-    panel(ctx, x, y, w, 18, count > 0 ? '#2b2740' : '#241f30', rc.color);
-    R.blit(ctx, A.ores[o.sprite], x + 12, y + 9, 14, 1);
-    Font.drawText(ctx, o.name, x + 24, y + 3, count > 0 ? C.white : C.gray);
-    let val = o.coins + (o.gems ? '' : '') ;
-    Font.drawText(ctx, 'x' + count, x + 24, y + 10, C.pale);
-    Font.drawText(ctx, o.coins + 'c' + (o.gems ? '  +' + o.gems + ' gem' : ''), x + 90, y + 6, C.yellow);
-    if (count > 0) {
-      button(ctx, x + w - 92, y + 3, 42, 12, 'SELL', { color: C.orange }, function () {
-        if (S.sellOre(o.id)) { Au.play('coin'); }
-      });
-      button(ctx, x + w - 48, y + 3, 44, 12, 'SELL ALL', { color: C.red }, function () {
-        const r = S.sellAllOre(o.id);
-        if (r.n > 0) { Au.play('buy'); toast('Sold ' + r.n + ' for ' + r.coins + 'c' + (r.gems ? ' +' + r.gems + ' gem' : ''), C.yellow); }
-      });
-    }
-  }
+  function countPlaced(id) { const st = S.get(); let n = 0; for (let i = 0; i < st.museum.length; i++) if (st.museum[i].id === id) n++; return n; }
 
   function drawSites(ctx, t, app) {
     modalBackdrop(ctx, app);
-    const w = 380, h = 200, x = (VW - w) / 2, y = (VH - h) / 2;
+    const w = 400, h = 224, x = (VW - w) / 2, y = (VH - h) / 2;
     panel(ctx, x, y, w, h, '#232038', C.gold);
     Font.drawText(ctx, 'EXCAVATION SITES', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
     button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
+    const vx = x + 6, vy = y + 22, vw = w - 14, vh = h - 28;
+    ctx.save(); ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
+    const st = S.get(); const rowH = 48; let cy = vy - app.scrollY;
+    for (let i = 0; i < D.SITES.length; i++) { drawSiteRow(ctx, D.SITES[i], vx, cy, vw, rowH, app); cy += rowH + 4; }
+    ctx.restore();
+    scrollClip(ctx, app, vx, vy, vw, vh, D.SITES.length * (rowH + 4));
+  }
+  function drawSiteRow(ctx, site, x, y, w, h, app) {
+    if (y + h < HUD_H || y > VH) return;
+    const st = S.get(); const unlocked = !!st.sites[site.id]; const biome = D.BIOMES[site.biome];
+    panel(ctx, x, y, w, h, unlocked ? '#2b2740' : '#241f30', unlocked ? biome.accent : C.dkgray2);
+    ctx.fillStyle = biome.soil[1]; ctx.fillRect(x, y, 4, h);
+    Font.drawText(ctx, site.name, x + 10, y + 4, unlocked ? C.white : C.ltgray, { shadow: C.ink });
+    Font.drawText(ctx, biome.name + ' - ' + site.period, x + 10, y + 13, biome.accent);
+    Font.drawTextWrapped(ctx, site.desc, x + 10, y + 22, w - 110, unlocked ? C.pale : C.gray);
+    if (unlocked) {
+      const d = st.depth[site.id] || 1, md = st.maxDepth[site.id] || 1;
+      Font.drawText(ctx, 'Depth ' + d + '  (best ' + md + ')', x + 10, y + h - 9, C.gold);
+      const active = app.siteId === site.id;
+      button(ctx, x + w - 78, y + 8, 70, 15, active ? 'DIGGING' : 'ENTER', { color: active ? C.green : C.steel, active: active }, function () { Au.play('tab'); app.siteId = site.id; app.closeModal(); app.setTab('dig'); });
+      button(ctx, x + w - 78, y + 26, 70, 13, 'RESET TO TOP', { color: C.dkgray2, enabled: d > 1 }, function () { window.Dig.resetToTop(site); Au.play('click'); toast('Back to depth 1', C.pale); });
+    } else {
+      const afford = S.canAfford(site.cost, 0);
+      button(ctx, x + w - 78, y + 10, 70, 16, 'UNLOCK', { color: afford ? C.orange : C.dkgray2, enabled: afford }, function () {
+        if (S.spend(site.cost, 0)) { st.sites[site.id] = true; S.saveSoon(); Au.play('newarea'); S.addXp(60); toast(site.name + ' unlocked!', C.lime); } else { Au.play('error'); toast('Need ' + fmt(site.cost) + ' coins', C.salmon); }
+      });
+      costLabel(ctx, x + w - 78, y + 30, site.cost, 0, afford);
+    }
+  }
 
-    const st = S.get();
-    let cy = y + 24;
-    for (let i = 0; i < D.SITES.length; i++) {
-      const site = D.SITES[i];
-      const unlocked = !!st.sites[site.id];
-      const rh = 52;
-      panel(ctx, x + 8, cy, w - 16, rh, unlocked ? '#2b2740' : '#241f30', unlocked ? C.teal : C.dkgray2);
-      Font.drawText(ctx, site.name, x + 16, cy + 5, unlocked ? C.white : C.ltgray, { scale: 1, shadow: C.ink });
-      Font.drawTextWrapped(ctx, site.desc, x + 16, cy + 15, w - 120, unlocked ? C.pale : C.gray);
-      Font.drawText(ctx, site.cols + 'x' + site.rows + ' grid   ' + site.hazards + ' hazards', x + 16, cy + rh - 9, C.gray);
-
-      if (unlocked) {
-        const active = app.siteId === site.id;
-        button(ctx, x + w - 84, cy + 8, 68, 16, active ? 'DIGGING' : 'ENTER',
-          { color: active ? C.green : C.steel, active: active }, function () {
-            Au.play('tab'); app.siteId = site.id; app.closeModal(); app.setTab('dig');
-          });
-      } else {
-        const afford = S.canAfford(site.cost, 0);
-        button(ctx, x + w - 84, cy + 8, 68, 16, 'UNLOCK', { color: afford ? C.orange : C.dkgray2, enabled: afford }, function () {
-          if (S.spend(site.cost, 0)) {
-            st.sites[site.id] = true;
-            S.saveSoon();
-            Au.play('newarea');
-            S.addXp(50);
-            toast(site.name + ' unlocked!', C.lime);
-          } else { Au.play('error'); toast('Need ' + site.cost + ' coins', C.salmon); }
-        });
-        costLabel(ctx, x + w - 84, cy + 28, site.cost, 0, afford);
-      }
-      cy += rh + 6;
+  function drawUpgrades(ctx, t, app) {
+    modalBackdrop(ctx, app);
+    const w = 420, h = 224, x = (VW - w) / 2, y = (VH - h) / 2;
+    panel(ctx, x, y, w, h, '#232038', C.gold);
+    Font.drawText(ctx, 'UPGRADES', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
+    button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
+    const vx = x + 6, vy = y + 22, vw = w - 14, vh = h - 28;
+    ctx.save(); ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
+    const rowH = 34; let cy = vy - app.scrollY;
+    for (let i = 0; i < U.LIST.length; i++) { drawUpgradeRow(ctx, U.LIST[i], vx, cy, vw, rowH, app); cy += rowH + 3; }
+    ctx.restore();
+    scrollClip(ctx, app, vx, vy, vw, vh, U.LIST.length * (rowH + 3));
+  }
+  function drawUpgradeRow(ctx, u, x, y, w, h, app) {
+    if (y + h < HUD_H || y > VH) return;
+    const lvl = U.level(u.id); const maxed = lvl >= u.max;
+    panel(ctx, x, y, w, h, '#2b2740', maxed ? C.gold : C.teal);
+    Font.drawText(ctx, u.name, x + 6, y + 4, C.white, { shadow: C.ink });
+    Font.drawTextWrapped(ctx, u.desc, x + 6, y + 13, w - 150, C.ltgray);
+    // level pips
+    for (let i = 0; i < u.max; i++) { ctx.fillStyle = i < lvl ? C.lime : '#0c0b16'; ctx.fillRect(x + 6 + i * 8, y + h - 8, 6, 4); }
+    Font.drawText(ctx, u.fmt(lvl), x + 6 + u.max * 8 + 6, y + h - 9, C.gold);
+    const cost = U.costFor(u.id);
+    if (maxed) { Font.drawText(ctx, 'MAX', x + w - 40, y + h / 2 - 3, C.gold, { align: 1 }); }
+    else {
+      const afford = S.canAfford(cost.coins, cost.gems);
+      button(ctx, x + w - 76, y + 6, 70, 14, 'UPGRADE', { color: afford ? C.green : C.dkgray2, enabled: afford }, function () {
+        if (U.buy(u.id)) { Au.play('buy'); FX.confetti(x + w - 40, y + h / 2, 16); toast(u.name + ' -> ' + u.fmt(U.level(u.id)), C.lime); if (u.id === 'storage') S.resizeGrid(U.storageSize()); }
+        else { Au.play('error'); toast('Cannot afford', C.salmon); }
+      });
+      costLabel(ctx, x + w - 76, y + 22, cost.coins, cost.gems, afford);
     }
   }
 
   function drawIntro(ctx, t, app) {
-    ctx.fillStyle = 'rgba(12,11,22,0.85)';
-    ctx.fillRect(0, 0, VW, VH);
-    const w = 340, h = 180, x = (VW - w) / 2, y = (VH - h) / 2;
+    ctx.fillStyle = 'rgba(12,11,22,0.9)'; ctx.fillRect(0, 0, VW, VH);
+    const w = 384, h = 210, x = (VW - w) / 2, y = (VH - h) / 2;
     panel(ctx, x, y, w, h, '#232038', C.gold);
-    Font.drawText(ctx, 'DINO DIG MUSEUM', x + w / 2, y + 12, C.cyan, { align: 1, scale: 2, shadow: C.maroon });
-    // little rex mascot tucked in the bottom-left corner, clear of the text
-    R.blit(ctx, A.skel.bigTheropod, x + 34, y + h - 30, 54, 1);
+    Font.drawText(ctx, 'DINO DIG MUSEUM', x + w / 2, y + 10, C.cyan, { align: 1, scale: 2, shadow: C.maroon });
+    R.blit(ctx, A.skel.spino, x + 40, y + h - 30, 60, 1);
     const lines = [
-      'Welcome, curator! Build the greatest',
-      'dinosaur museum in the world.',
+      'Curator! Build the greatest dino museum on Earth.',
       '',
-      '1. DIG at excavation sites - reveal tiles',
-      '   minesweeper-style. Numbers warn of',
-      '   nearby hazards. Flag them, avoid them!',
-      '2. Collect 4 bone pieces to MOUNT a',
-      '   skeleton exhibit in your museum.',
-      '3. Exhibits draw visitors and earn coins',
-      '   even while you are away.',
+      'DIG: numbers show how many TREASURES hide next',
+      '  door. SURVEY tiles for clues, then switch to',
+      '  EXCAVATE (or hold) to send a dig team.',
+      'STORAGE: excavated fossils are shaped blocks -',
+      '  pack them in and clear rows/columns to bank them.',
+      'MOUNT: banked fossils fill a species bar; mount the',
+      '  skeleton to draw crowds and earn coins - even idle!',
+      'Dig DEEPER for rarer finds. Spend gems on UPGRADES.',
     ];
-    for (let i = 0; i < lines.length; i++) {
-      Font.drawText(ctx, lines[i], x + 16, y + 32 + i * 11, i < 3 ? C.white : C.pale);
-    }
-    button(ctx, x + w / 2 + 6, y + h - 24, 120, 16, 'START DIGGING!', { color: C.green }, function () {
-      Au.play('newarea');
-      S.get().firstRun = false;
-      S.saveSoon();
-      app.closeModal();
-      app.setTab('dig');
-    });
+    for (let i = 0; i < lines.length; i++) Font.drawText(ctx, lines[i], x + 14, y + 30 + i * 11, i === 0 ? C.white : C.pale);
+    button(ctx, x + w / 2 + 10, y + h - 24, 130, 16, 'START DIGGING!', { color: C.green }, function () { Au.play('newarea'); S.get().firstRun = false; S.saveSoon(); app.closeModal(); app.setTab('dig'); });
   }
 
   function drawOffline(ctx, t, app) {
@@ -621,56 +490,31 @@
     R.blit(ctx, A.icons.coin, x + w / 2 - 34, y + 54, 16, 1);
     Font.drawText(ctx, '+' + fmt(o ? o.coins : 0), x + w / 2 - 20, y + 48, C.yellow, { scale: 2, shadow: C.maroon });
     Font.drawText(ctx, '(' + (o ? o.hours.toFixed(1) : '0') + 'h at half rate)', x + w / 2, y + 70, C.gray, { align: 1 });
-    button(ctx, x + w / 2 - 40, y + h - 24, 80, 16, 'COLLECT', { color: C.green }, function () {
-      Au.play('coin'); app.closeModal();
-    });
+    button(ctx, x + w / 2 - 40, y + h - 24, 80, 16, 'COLLECT', { color: C.green }, function () { Au.play('coin'); app.closeModal(); });
   }
 
-  // =========================================================================
-  // TOASTS + FLASH
-  // =========================================================================
   function drawToasts(ctx) {
     const baseY = VH - TAB_H - 14;
     for (let i = 0; i < toasts.length; i++) {
       const to = toasts[toasts.length - 1 - i];
       const a = to.life < 200 ? to.life / 200 : (to.life > to.ttl - 300 ? (to.ttl - to.life) / 300 : 1);
-      const y = baseY - i * 16;
+      const y = baseY - i * 15;
       const w = Font.textW(to.msg) + 16 + (to.icon ? 10 : 0);
-      ctx.globalAlpha = Math.max(0, a) * 0.92;
-      ctx.fillStyle = '#12101c';
-      ctx.fillRect(VW / 2 - w / 2, y - 2, w, 13);
-      ctx.fillStyle = to.color;
-      ctx.fillRect(VW / 2 - w / 2, y - 2, 2, 13);
+      ctx.globalAlpha = Math.max(0, a) * 0.92; ctx.fillStyle = '#12101c'; ctx.fillRect(VW / 2 - w / 2, y - 2, w, 13);
+      ctx.fillStyle = to.color; ctx.fillRect(VW / 2 - w / 2, y - 2, 2, 13);
       ctx.globalAlpha = Math.max(0, a);
-      let tx = VW / 2 - w / 2 + 6;
-      if (to.icon) { R.blit(ctx, to.icon, tx + 4, y + 4, 8); tx += 12; }
+      let tx = VW / 2 - w / 2 + 6; if (to.icon) { R.blit(ctx, to.icon, tx + 4, y + 4, 8); tx += 12; }
       Font.drawText(ctx, to.msg, tx, y + 1, to.color, { shadow: C.ink });
       ctx.globalAlpha = 1;
     }
   }
 
-  function drawFlash(ctx) {
-    if (flash > 0) {
-      ctx.globalAlpha = (flash / 350) * 0.5;
-      ctx.fillStyle = C.red;
-      ctx.fillRect(0, 0, VW, VH);
-      ctx.globalAlpha = 1;
-    }
-  }
-
   window.UI = {
-    reset: reset, push: push, handleTap: handleTap,
-    toast: toast, tickToasts: tickToasts,
-    triggerHazard: triggerHazard, shakeOffset: shakeOffset,
-    drawHUD: drawHUD, drawTabs: drawTabs,
-    drawMuseumOverlay: drawMuseumOverlay,
-    drawDigOverlay: drawDigOverlay,
-    drawShop: drawShop,
-    drawCollection: drawCollection,
-    drawSites: drawSites,
-    drawIntro: drawIntro,
-    drawOffline: drawOffline,
-    drawToasts: drawToasts, drawFlash: drawFlash,
+    reset: reset, push: push, handleTap: handleTap, toast: toast, tickToasts: tickToasts,
+    drawHUD: drawHUD, drawTabs: drawTabs, drawMuseumOverlay: drawMuseumOverlay,
+    drawDigOverlay: drawDigOverlay, drawStorageOverlay: drawStorageOverlay, drawShop: drawShop,
+    drawCollection: drawCollection, drawSites: drawSites, drawUpgrades: drawUpgrades,
+    drawIntro: drawIntro, drawOffline: drawOffline, drawToasts: drawToasts,
     fmt: fmt, displayName: displayName,
   };
 })();

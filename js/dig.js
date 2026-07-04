@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Excavation board — minesweeper-style. A site is a grid of buried dirt tiles.
-// Reveal a tile (costs energy); numbers show how many adjacent tiles hide a
-// HAZARD (gas pocket / unstable boulder). Empty tiles cascade open. Tiles can
-// hide loot: fossil pieces, ore, coins, or gems. Flag suspected hazards.
-// Boards persist per-site so a dig can be paused and resumed.
+// Excavation board (v2) - an INVERTED minesweeper. The hidden "mines" are the
+// treasures: fossil nodes, ore veins and gem geodes. Numbers on surveyed tiles
+// count adjacent BURIED TREASURES. Deduce where they are, then send a dig team
+// to EXCAVATE them for a pristine find; careless SURVEYING onto a node yields a
+// damaged one. Clear every node to unlock DIG DEEPER (the next depth level).
 // ---------------------------------------------------------------------------
 (function () {
   'use strict';
@@ -12,243 +12,213 @@
   const S = window.GameState;
 
   function rnd() { return Math.random(); }
+  function ri(n) { return (Math.random() * n) | 0; }
 
-  function makeBoard(site) {
+  function depthOf(site) { return S.get().depth[site.id] || 1; }
+
+  function boardDims(site, depth) {
+    const grow = Math.min(3, Math.floor((depth - 1) / 2));
+    return {
+      cols: Math.min(15, site.cols + grow),
+      rows: Math.min(13, site.rows + grow),
+      nodes: site.nodes + (depth - 1) * 2,
+    };
+  }
+
+  function makeBoard(site, depth) {
+    const dim = boardDims(site, depth);
     const cells = [];
-    for (let i = 0; i < site.cols * site.rows; i++) {
-      cells.push({ revealed: false, flagged: false, hazard: false, content: null, adj: 0, exploded: false });
+    for (let i = 0; i < dim.cols * dim.rows; i++) {
+      cells.push({ revealed: false, flagged: false, node: null, extracted: false, adj: 0 });
     }
     return {
-      siteId: site.id, cols: site.cols, rows: site.rows,
-      hazards: site.hazards, cells: cells,
-      generated: false, safeLeft: 0, foundCount: 0, hits: 0,
+      siteId: site.id, depth: depth, cols: dim.cols, rows: dim.rows,
+      nodeTotal: dim.nodes, nodesLeft: dim.nodes,
+      cells: cells, generated: false, surveys: 0, misfires: 0,
     };
   }
 
   function getBoard(site) {
     const st = S.get();
-    if (!st.boards[site.id]) st.boards[site.id] = makeBoard(site);
-    const b = st.boards[site.id];
-    // migrate/repair if dimensions changed
-    if (b.cols !== site.cols || b.rows !== site.rows || !b.cells) {
-      st.boards[site.id] = makeBoard(site);
-      return st.boards[site.id];
-    }
+    const depth = depthOf(site);
+    let b = st.boards[site.id];
+    if (!b || b.depth !== depth || !b.cells) { b = makeBoard(site, depth); st.boards[site.id] = b; }
     return b;
   }
 
   function idx(b, x, y) { return y * b.cols + x; }
   function inBounds(b, x, y) { return x >= 0 && y >= 0 && x < b.cols && y < b.rows; }
-
   function neighbors(b, x, y) {
     const out = [];
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        if (inBounds(b, x + dx, y + dy)) out.push([x + dx, y + dy]);
-      }
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (inBounds(b, x + dx, y + dy)) out.push([x + dx, y + dy]);
     }
     return out;
   }
 
-  function weightedPick(table) {
-    let total = 0;
-    for (let i = 0; i < table.length; i++) total += table[i].weight;
-    let r = rnd() * total;
-    for (let i = 0; i < table.length; i++) {
-      r -= table[i].weight;
-      if (r <= 0) return table[i];
+  function pickSpecies(site, depth) {
+    let id = D.weightedKey(site.species);
+    // deeper digs bias toward rarer species
+    const p = Math.min(0.7, (depth - 1) * 0.1);
+    if (rnd() < p) {
+      const id2 = D.weightedKey(site.species);
+      const r1 = D.RARITY_ORDER.indexOf(D.fossilById(id).rarity);
+      const r2 = D.RARITY_ORDER.indexOf(D.fossilById(id2).rarity);
+      if (r2 > r1) id = id2;
     }
-    return table[table.length - 1];
+    return id;
   }
 
-  function rollLoot(site) {
-    const entry = weightedPick(site.loot);
-    if (entry.type === 'piece') {
-      const fossilId = entry.pool[(rnd() * entry.pool.length) | 0];
-      const piece = D.PIECES[(rnd() * D.PIECES.length) | 0];
-      return { type: 'piece', fossilId: fossilId, piece: piece };
-    }
-    if (entry.type === 'ore') {
-      const oreId = entry.pool[(rnd() * entry.pool.length) | 0];
-      return { type: 'ore', oreId: oreId };
-    }
-    if (entry.type === 'coins') {
-      const amt = entry.min + ((rnd() * (entry.max - entry.min + 1)) | 0);
-      return { type: 'coins', amount: amt };
-    }
-    if (entry.type === 'gem') {
-      return { type: 'gem', amount: entry.amount || 1 };
-    }
-    return { type: 'coins', amount: 10 };
+  function makeFossilNode(site, depth) {
+    const fid = pickSpecies(site, depth);
+    const f = D.fossilById(fid);
+    const pool = D.RARITY_SHAPES[f.rarity];
+    const shape = pool[ri(pool.length)];
+    const cells = D.shapeCells(shape).map(function (c) { return [c[0], c[1]]; });
+    return { type: 'fossil', fossilId: fid, rarity: f.rarity, shape: shape, cells: cells };
   }
 
-  // Generate hazards + loot AFTER the first reveal, keeping the first cell and
-  // its neighbors hazard-free (classic minesweeper "safe first click").
+  function makeNode(site, depth) {
+    if (rnd() < (site.gemRate || 0.1)) {
+      return { type: 'gem', amount: 1 + ri(1 + Math.floor(depth / 3)) };
+    }
+    if (rnd() < 0.34) {
+      return { type: 'ore', oreId: D.weightedKey(site.ores) };
+    }
+    return makeFossilNode(site, depth);
+  }
+
   function generate(b, site, safeX, safeY) {
     const forbidden = {};
     forbidden[idx(b, safeX, safeY)] = true;
-    const nb = neighbors(b, safeX, safeY);
-    for (let i = 0; i < nb.length; i++) forbidden[idx(b, nb[i][0], nb[i][1])] = true;
+    neighbors(b, safeX, safeY).forEach(function (n) { forbidden[idx(b, n[0], n[1])] = true; });
 
-    let placed = 0;
     const total = b.cols * b.rows;
-    let guard = 0;
-    while (placed < b.hazards && guard < 10000) {
+    let placed = 0, guard = 0;
+    while (placed < b.nodeTotal && guard < 20000) {
       guard++;
-      const c = (rnd() * total) | 0;
-      if (forbidden[c] || b.cells[c].hazard) continue;
-      b.cells[c].hazard = true;
+      const c = ri(total);
+      if (forbidden[c] || b.cells[c].node) continue;
+      b.cells[c].node = makeNode(site, b.depth);
       placed++;
     }
-
-    // adjacency counts
-    for (let y = 0; y < b.rows; y++) {
-      for (let x = 0; x < b.cols; x++) {
-        const cell = b.cells[idx(b, x, y)];
-        if (cell.hazard) continue;
-        let n = 0;
-        const ns = neighbors(b, x, y);
-        for (let i = 0; i < ns.length; i++) {
-          if (b.cells[idx(b, ns[i][0], ns[i][1])].hazard) n++;
-        }
-        cell.adj = n;
-      }
-    }
-
-    // loot on ~24% of safe cells
-    const safeCells = [];
-    for (let i = 0; i < total; i++) if (!b.cells[i].hazard) safeCells.push(i);
-    b.safeLeft = safeCells.length;
-    const lootCount = Math.max(4, Math.round(safeCells.length * 0.24));
-    // shuffle safeCells
-    for (let i = safeCells.length - 1; i > 0; i--) {
-      const j = (rnd() * (i + 1)) | 0;
-      const t = safeCells[i]; safeCells[i] = safeCells[j]; safeCells[j] = t;
-    }
-    for (let i = 0; i < lootCount && i < safeCells.length; i++) {
-      // don't put loot directly on the guaranteed first cell (feels bad to skip)
-      if (safeCells[i] === idx(b, safeX, safeY)) continue;
-      b.cells[safeCells[i]].content = rollLoot(site);
+    b.nodeTotal = placed; b.nodesLeft = placed;
+    // adjacency = count of neighbor nodes
+    for (let y = 0; y < b.rows; y++) for (let x = 0; x < b.cols; x++) {
+      const cell = b.cells[idx(b, x, y)];
+      if (cell.node) continue;
+      let n = 0;
+      neighbors(b, x, y).forEach(function (nb) { if (b.cells[idx(b, nb[0], nb[1])].node) n++; });
+      cell.adj = n;
     }
     b.generated = true;
   }
 
-  // Reveal a single cell, cascading through empty (adj==0, no content) tiles.
-  // Returns { rewards:[], hazard:bool, revealedCount } for the caller/UI.
-  function reveal(b, site, x, y) {
-    const result = { rewards: [], hazard: false, revealedCount: 0, exploded: null };
-    if (!inBounds(b, x, y)) return result;
+  // SURVEY: reveal a hidden tile (cheap, informative). Cascades on 0.
+  // Hitting a node = careless find (damaged unless the Survey Kit saves it).
+  function survey(b, site, x, y) {
+    const res = { revealed: [], hit: null, cascade: 0 };
+    if (!inBounds(b, x, y)) return res;
     if (!b.generated) generate(b, site, x, y);
-
     const start = b.cells[idx(b, x, y)];
-    if (start.revealed || start.flagged) return result;
+    if (start.revealed || start.extracted) return res;
 
-    if (start.hazard) {
-      start.revealed = true;
-      start.exploded = true;
-      b.hits++;
-      result.hazard = true;
-      result.exploded = { x: x, y: y };
+    if (start.node) {
+      // careless extraction
+      const pristine = Math.random() < window.Upgrades.surveyPristine();
+      start.revealed = true; start.extracted = true;
+      b.nodesLeft--; b.surveys++;
+      res.hit = { node: start.node, pristine: pristine, x: x, y: y };
       S.saveSoon();
-      return result;
+      return res;
     }
 
-    // BFS/flood fill
-    const stack = [[x, y]];
-    const seen = {};
-    seen[idx(b, x, y)] = true;
+    // flood fill through empty tiles (never through nodes)
+    const stack = [[x, y]]; const seen = {}; seen[idx(b, x, y)] = true;
     while (stack.length) {
       const cur = stack.pop();
       const cx = cur[0], cy = cur[1];
       const cell = b.cells[idx(b, cx, cy)];
-      if (cell.revealed || cell.flagged || cell.hazard) continue;
-      cell.revealed = true;
-      b.safeLeft--;
-      result.revealedCount++;
-      if (cell.content) {
-        result.rewards.push({ x: cx, y: cy, content: cell.content });
-      }
-      // cascade only through truly empty tiles (no number, no content)
-      if (cell.adj === 0 && !cell.content) {
-        const ns = neighbors(b, cx, cy);
-        for (let i = 0; i < ns.length; i++) {
-          const ni = idx(b, ns[i][0], ns[i][1]);
-          if (!seen[ni] && !b.cells[ni].revealed && !b.cells[ni].hazard) {
-            seen[ni] = true;
-            stack.push([ns[i][0], ns[i][1]]);
-          }
-        }
+      if (cell.revealed || cell.node || cell.extracted) continue;
+      cell.revealed = true; cell.flagged = false;
+      res.revealed.push([cx, cy]); res.cascade++;
+      if (cell.adj === 0) {
+        neighbors(b, cx, cy).forEach(function (nb) {
+          const ni = idx(b, nb[0], nb[1]);
+          if (!seen[ni] && !b.cells[ni].node && !b.cells[ni].revealed) { seen[ni] = true; stack.push([nb[0], nb[1]]); }
+        });
       }
     }
-    // apply rewards to state
-    for (let i = 0; i < result.rewards.length; i++) {
-      applyReward(result.rewards[i].content);
-      b.foundCount++;
-    }
+    b.surveys++;
     S.saveSoon();
-    return result;
+    return res;
   }
 
-  function applyReward(content) {
-    if (content.type === 'piece') {
-      S.addPiece(content.fossilId, content.piece);
-    } else if (content.type === 'ore') {
-      S.addOre(content.oreId, 1);
-    } else if (content.type === 'coins') {
-      S.addCoins(content.amount);
-    } else if (content.type === 'gem') {
-      S.addGems(content.amount);
+  // EXCAVATE: send a dig team to a specific tile (costs more). Pristine on a
+  // real node; a miss just reveals the number (a wasted dig).
+  function excavate(b, site, x, y) {
+    const res = { extracted: null, miss: false };
+    if (!inBounds(b, x, y)) return res;
+    if (!b.generated) generate(b, site, x, y);
+    const cell = b.cells[idx(b, x, y)];
+    if (cell.revealed || cell.extracted) return res;
+
+    if (cell.node) {
+      cell.revealed = true; cell.extracted = true; cell.flagged = false;
+      b.nodesLeft--;
+      res.extracted = { node: cell.node, pristine: true, x: x, y: y };
+      S.saveSoon();
+      return res;
     }
+    // miss: reveal as number
+    cell.revealed = true; cell.flagged = false; b.misfires++;
+    res.miss = true; res.adj = cell.adj;
+    S.saveSoon();
+    return res;
   }
 
   function toggleFlag(b, x, y) {
     if (!inBounds(b, x, y)) return false;
-    const cell = b.cells[idx(b, x, y)];
-    if (cell.revealed) return false;
-    cell.flagged = !cell.flagged;
-    S.saveSoon();
-    return cell.flagged;
+    const c = b.cells[idx(b, x, y)];
+    if (c.revealed || c.extracted) return false;
+    c.flagged = !c.flagged; S.saveSoon(); return c.flagged;
   }
 
-  // How many safe (non-hazard) cells remain hidden.
-  function remainingSafe(b) {
-    if (!b.generated) return b.cols * b.rows - b.hazards;
-    let n = 0;
-    for (let i = 0; i < b.cells.length; i++) {
-      if (!b.cells[i].hazard && !b.cells[i].revealed) n++;
-    }
+  function nodesLeft(b) { return b.generated ? b.nodesLeft : b.nodeTotal; }
+  function isCleared(b) { return b.generated && b.nodesLeft <= 0; }
+  function flagCount(b) {
+    let n = 0; for (let i = 0; i < b.cells.length; i++) if (b.cells[i].flagged && !b.cells[i].revealed) n++;
     return n;
   }
 
-  function isCleared(b) {
-    return b.generated && remainingSafe(b) === 0;
+  function descend(site) {
+    const st = S.get();
+    const d = (st.depth[site.id] || 1) + 1;
+    st.depth[site.id] = d;
+    st.maxDepth[site.id] = Math.max(st.maxDepth[site.id] || 1, d);
+    st.stats.deepest = Math.max(st.stats.deepest || 1, d);
+    st.boards[site.id] = makeBoard(site, d);
+    S.saveSoon();
+    return d;
   }
-
-  // Fresh section: regenerate the board (used when cleared or player resets).
+  function resetToTop(site) {
+    const st = S.get();
+    st.depth[site.id] = 1;
+    st.boards[site.id] = makeBoard(site, 1);
+    S.saveSoon();
+  }
   function regenerate(site) {
     const st = S.get();
-    st.boards[site.id] = makeBoard(site);
+    st.boards[site.id] = makeBoard(site, depthOf(site));
     S.saveSoon();
     return st.boards[site.id];
   }
 
-  // Count flags placed (for UI hazard counter).
-  function flagCount(b) {
-    let n = 0;
-    for (let i = 0; i < b.cells.length; i++) if (b.cells[i].flagged && !b.cells[i].revealed) n++;
-    return n;
-  }
-
   window.Dig = {
-    getBoard: getBoard,
-    reveal: reveal,
-    toggleFlag: toggleFlag,
-    remainingSafe: remainingSafe,
-    isCleared: isCleared,
-    regenerate: regenerate,
-    flagCount: flagCount,
-    inBounds: inBounds,
-    idx: idx,
+    getBoard: getBoard, survey: survey, excavate: excavate, toggleFlag: toggleFlag,
+    nodesLeft: nodesLeft, isCleared: isCleared, flagCount: flagCount,
+    descend: descend, resetToTop: resetToTop, regenerate: regenerate, depthOf: depthOf,
+    inBounds: inBounds, idx: idx,
   };
 })();

@@ -713,6 +713,196 @@
     return p.canvas;
   }
 
+  // Crested biped (Dilophosaurus / Parasaurolophus) - face left, swept crest.
+  function skelCrested() {
+    const p = painter(30, 22);
+    // far leg
+    p.line(19, 10, 18, 14, BD); p.line(18, 14, 20, 17, BD); p.rect(19, 18, 3, 1, BD);
+    // skull + backward crest
+    p.rect(2, 4, 5, 2, BW); p.rect(0, 5, 4, 2, BW); p.px(5, 5, C.ink);
+    p.curve([[6, 4], [8, 2], [10, 1]], BS); // crest sweeping up-back
+    p.curve([[6, 5], [9, 3], [11, 2]], BW);
+    p.px(1, 7, BS); // jaw hint
+    // neck s-curve
+    p.curve([[6, 5], [8, 5], [9, 6], [11, 7]], BW);
+    const sp = spinePts(11, 7, 19, 8, -1);
+    drawSpine(p, sp, BW); vertebrae(p, sp, BS);
+    ribs(p, 12, 9, 5, 4);
+    p.rect(18, 7, 2, 2, BW);
+    const tl = spinePts(20, 8, 29, 12, 1);
+    drawSpine(p, tl, BW); p.px(29, 11, BW);
+    // near leg
+    p.line(18, 9, 16, 14, BW, true); p.line(16, 14, 18, 17, BW); p.rect(16, 18, 4, 1, BW);
+    p.line(12, 9, 11, 11, BS);
+    return p.canvas;
+  }
+
+  // Dome-headed biped (Pachycephalosaurus).
+  function skelDome() {
+    const p = painter(28, 20);
+    p.line(18, 9, 17, 13, BD); p.line(17, 13, 19, 16, BD); p.rect(18, 17, 3, 1, BD);
+    // thick round dome skull
+    p.disc(4, 4, 3, BW); p.disc(4, 4, 2, BS); p.px(3, 4, C.ink);
+    p.rect(1, 6, 3, 2, BW); p.px(0, 7, BS); // snout
+    // neck
+    p.curve([[6, 5], [8, 6], [10, 7]], BW, true);
+    const sp = spinePts(10, 7, 18, 8, -1);
+    drawSpine(p, sp, BW); vertebrae(p, sp, BS);
+    ribs(p, 11, 9, 5, 4);
+    p.rect(17, 7, 2, 2, BW);
+    const tl = spinePts(19, 8, 27, 10, 0);
+    drawSpine(p, tl, BW); vertebrae(p, tl, BS);
+    p.line(17, 9, 15, 13, BW, true); p.line(15, 13, 17, 16, BW); p.rect(15, 17, 4, 1, BW);
+    return p.canvas;
+  }
+
+  // Long-clawed pot-bellied biped (Therizinosaurus).
+  function skelClaw() {
+    const p = painter(30, 24);
+    p.line(18, 12, 17, 17, BD); p.rect(17, 18, 3, 1, BD);
+    // long neck up to small head
+    p.curve([[3, 2], [5, 3], [7, 5], [9, 8], [11, 11]], BW, true);
+    p.rect(1, 1, 4, 2, BW); p.px(4, 1, C.ink);
+    // round belly ribcage
+    p.disc(14, 13, 5, BD);
+    for (let a = 0; a < 6; a++) { const t = a / 6 * Math.PI; p.line(14, 8, 14 + Math.round(Math.cos(t + 0.4) * 6), 13 + Math.round(Math.sin(t + 0.4) * 5), a % 2 ? BS : BW); }
+    const sp = spinePts(11, 9, 19, 10, -1); drawSpine(p, sp, BW);
+    // giant scythe arm claws
+    p.curve([[12, 10], [10, 12], [7, 12], [4, 10]], BW, true);
+    p.curve([[13, 11], [11, 14], [8, 15], [5, 14]], BS);
+    p.rect(18, 9, 2, 2, BW);
+    p.curve([[20, 10], [24, 11], [26, 13]], BW);
+    p.line(17, 12, 15, 17, BW, true); p.line(15, 17, 17, 20, BW); p.rect(15, 21, 4, 1, BW);
+    return p.canvas;
+  }
+
+  // Sail-backed river giant (Spinosaurus).
+  function skelSpino() {
+    const p = painter(36, 28);
+    const oy = 1;
+    // far leg
+    p.line(26, 14 + oy, 25, 18 + oy, BD); p.rect(25, 22 + oy, 4, 1, BD);
+    // long croc snout skull
+    p.rect(2, 6 + oy, 8, 3, BW); p.rect(0, 8 + oy, 4, 2, BW); p.px(8, 7 + oy, C.ink);
+    p.px(0, 9 + oy, BW); p.px(2, 10 + oy, BW); p.px(5, 10 + oy, BW); // teeth
+    p.line(9, 6 + oy, 12, 8 + oy, BW, true); // neck
+    const sp = spinePts(12, 8 + oy, 26, 9 + oy, -2);
+    drawSpine(p, sp, BW); vertebrae(p, sp, BS);
+    // tall sail of neural spines
+    for (let i = 1; i < sp.length - 1; i++) {
+      const pt = sp[i];
+      const t = i / (sp.length - 1);
+      const hgt = Math.round(2 + Math.sin(t * Math.PI) * 9);
+      for (let d = 1; d <= hgt; d++) p.px(pt[0], pt[1] - d, d === hgt ? BS : (d % 2 ? BW : BS));
+    }
+    // sail membrane edge
+    p.curve([[13, 6 + oy], [19, -2 + oy], [26, 6 + oy]], BD);
+    ribs(p, 14, 10 + oy, 6, 5);
+    p.rect(25, 8 + oy, 3, 3, BW);
+    const tl = spinePts(28, 9 + oy, 35, 15 + oy, -1);
+    drawSpine(p, tl, BW); vertebrae(p, tl, BS);
+    p.line(25, 12 + oy, 23, 17 + oy, BW, true); p.line(23, 18 + oy, 25, 22 + oy, BW); p.rect(23, 23 + oy, 4, 1, BW);
+    p.line(13, 11 + oy, 12, 14 + oy, BS);
+    return p.canvas;
+  }
+
+  // Marine long-neck with paddles (Plesiosaurus) - horizontal.
+  function skelPlesio() {
+    const p = painter(34, 22);
+    // oval body
+    p.disc(18, 11, 5, BD);
+    for (let a = 0; a < 7; a++) { const t = a / 7 * Math.PI * 2; p.px(18 + Math.round(Math.cos(t) * 6), 11 + Math.round(Math.sin(t) * 4), a % 2 ? BW : BS); }
+    // long neck up-left to small head
+    p.curve([[14, 9], [10, 7], [6, 5], [3, 3], [1, 2]], BW, true);
+    p.rect(0, 1, 3, 2, BW); p.px(2, 1, C.ink);
+    // short tail right
+    p.curve([[23, 11], [27, 12], [30, 13]], BW);
+    // 4 paddle flippers
+    p.curve([[15, 14], [13, 18], [11, 20]], BW); p.curve([[16, 14], [15, 18], [14, 20]], BS);
+    p.curve([[21, 14], [23, 18], [25, 20]], BW); p.curve([[20, 14], [21, 18], [22, 20]], BS);
+    // spine ridge
+    const sp = spinePts(14, 8, 23, 9, -1); drawSpine(p, sp, BS);
+    return p.canvas;
+  }
+
+  // Sea monster with big jaws + finned tail (Mosasaurus) - horizontal.
+  function skelMosa() {
+    const p = painter(36, 18);
+    // long tapered spine
+    const sp = spinePts(8, 9, 30, 9, 0);
+    drawSpine(p, sp, BW); vertebrae(p, sp, BS);
+    // big toothy jaws (left)
+    p.rect(2, 7, 7, 2, BW); p.rect(1, 9, 8, 2, BW); p.px(7, 7, C.ink);
+    for (let x = 1; x < 8; x += 2) { p.px(x, 6, BW); p.px(x + 1, 11, BW); } // teeth
+    // ribs along body
+    for (let i = 3; i < sp.length - 4; i += 2) { p.line(sp[i][0], sp[i][1], sp[i][0], sp[i][1] + 4, i % 4 ? BS : BW); }
+    // flippers
+    p.curve([[14, 11], [15, 14], [17, 16]], BW); p.curve([[20, 11], [21, 14], [23, 16]], BS);
+    // finned tail (down-turned)
+    p.curve([[30, 9], [33, 11], [35, 14]], BW);
+    p.curve([[33, 11], [34, 8], [35, 6]], BS); // upper fin
+    return p.canvas;
+  }
+
+  // Medium theropod with brow ridges (Allosaurus).
+  function skelAllo() {
+    const p = painter(30, 24);
+    const oy = 1;
+    p.line(22, 11 + oy, 21, 16 + oy, BD); p.rect(22, 20 + oy, 4, 1, BD);
+    p.rect(2, 3 + oy, 7, 3, BW); p.rect(0, 5 + oy, 6, 2, BW); p.px(6, 4 + oy, C.ink);
+    p.px(2, 2 + oy, BS); p.px(4, 2 + oy, BS); // brow ridges
+    p.px(0, 7 + oy, BW); p.px(2, 7 + oy, BW); p.px(4, 7 + oy, BW);
+    p.line(9, 5 + oy, 12, 7 + oy, BW, true);
+    const sp = spinePts(12, 7 + oy, 22, 8 + oy, -2);
+    drawSpine(p, sp, BW); vertebrae(p, sp, BS);
+    ribs(p, 13, 9 + oy, 5, 4);
+    p.rect(21, 7 + oy, 3, 3, BW);
+    const tl = spinePts(24, 8 + oy, 29, 13 + oy, -1);
+    drawSpine(p, tl, BW);
+    p.line(21, 11 + oy, 19, 16 + oy, BW, true); p.line(19, 16 + oy, 21, 20 + oy, BW); p.rect(19, 21 + oy, 4, 1, BW);
+    p.line(13, 10 + oy, 12, 12 + oy, BS);
+    return p.canvas;
+  }
+
+  // Very long neck + whip tail (Diplodocus).
+  function skelDiplo() {
+    const p = painter(36, 28);
+    p.line(14, 20, 14, 25, BD); p.rect(13, 26, 3, 1, BD);
+    p.line(22, 20, 22, 25, BD); p.rect(21, 26, 3, 1, BD);
+    p.rect(1, 3, 4, 2, BW); p.px(4, 3, C.ink);
+    p.curve([[4, 4], [6, 6], [8, 9], [9, 13], [10, 16]], BW, true);
+    const sp = spinePts(10, 16, 23, 15, -2);
+    drawSpine(p, sp, BW); vertebrae(p, sp, BS);
+    ribs(p, 12, 17, 6, 5);
+    p.rect(22, 14, 3, 3, BW);
+    // extra-long whip tail
+    const tl = spinePts(25, 15, 35, 20, 3);
+    drawSpine(p, tl, BW); p.px(35, 19, BW); p.px(34, 18, BS);
+    p.line(13, 19, 13, 25, BW); p.line(12, 19, 12, 25, BW); p.rect(11, 26, 4, 1, BW);
+    p.line(22, 19, 22, 25, BW); p.line(21, 19, 21, 25, BW); p.rect(20, 26, 4, 1, BW);
+    return p.canvas;
+  }
+
+  // Giant crested pterosaur (Quetzalcoatlus) - broad wings, long crest.
+  function skelBigPtero() {
+    const p = painter(34, 22);
+    // wide wings
+    p.line(15, 11, 2, 3, BW); p.line(15, 11, 4, 8, BS); p.line(15, 11, 7, 13, BW);
+    p.curve([[2, 3], [4, 8], [7, 13]], BD);
+    p.line(18, 11, 31, 3, BW); p.line(18, 11, 29, 8, BS); p.line(18, 11, 26, 13, BW);
+    p.curve([[31, 3], [29, 8], [26, 13]], BD);
+    // body
+    p.rect(15, 10, 4, 4, BW); p.px(15, 14, BS); p.px(18, 14, BS);
+    // long head + crest + beak
+    p.rect(13, 5, 5, 3, BW); p.px(14, 6, C.ink);
+    p.curve([[17, 5], [19, 3], [21, 3]], BS); // crest
+    p.line(10, 8, 13, 7, BW); // long beak
+    // legs
+    p.line(16, 14, 14, 18, BD); p.line(18, 14, 20, 18, BD);
+    p.line(16, 14, 16, 19, BW); p.rect(15, 19, 3, 1, BW);
+    return p.canvas;
+  }
+
   // -------------------------------------------------------------------------
   // Exhibit composite: pedestal + skeleton + velvet rope. 36x44, anchor bottom.
   // -------------------------------------------------------------------------
@@ -890,6 +1080,186 @@
     return p.canvas;
   }
 
+  function palmSprite() {
+    const p = painter(16, 24);
+    // trunk
+    p.rect(7, 10, 2, 12, C.ltbrown);
+    p.rect(7, 10, 1, 12, C.tan);
+    for (let y = 12; y < 22; y += 3) p.rect(6, y, 4, 1, C.brown);
+    // crown of fronds
+    p.curve([[8, 9], [3, 6], [0, 7]], C.dkgreen);
+    p.curve([[8, 9], [13, 6], [15, 7]], C.dkgreen);
+    p.curve([[8, 8], [5, 3], [3, 1]], C.green);
+    p.curve([[8, 8], [11, 3], [13, 1]], C.green);
+    p.curve([[8, 8], [8, 3], [8, 0]], C.lime);
+    p.disc(8, 9, 2, C.dkgreen);
+    p.px(6, 5, C.lime); p.px(10, 5, C.lime);
+    return p.canvas;
+  }
+
+  function topiarySprite() {
+    const p = painter(20, 18);
+    // base pot
+    p.rect(7, 15, 6, 3, C.ltbrown); p.rect(7, 15, 6, 1, C.tan);
+    // sauropod-shaped hedge
+    p.disc(6, 10, 4, C.dkgreen);
+    p.disc(13, 9, 3, C.dkgreen);
+    p.curve([[9, 12], [11, 10], [13, 9]], C.dkgreen, true);
+    p.curve([[14, 8], [16, 6], [17, 4]], C.green, true); // neck
+    p.disc(17, 3, 2, C.dkgreen); // head
+    p.curve([[3, 10], [1, 12], [0, 14]], C.green, true); // tail
+    // leaf speckle
+    const r = mulberry32(91);
+    for (let i = 0; i < 16; i++) p.px(1 + r() * 16, 2 + r() * 12, C.lime);
+    return p.canvas;
+  }
+
+  function lampFrames() {
+    const frames = [];
+    for (let f = 0; f < 2; f++) {
+      const p = painter(12, 24);
+      // post
+      p.rect(5, 6, 2, 17, C.dkgray2);
+      p.rect(5, 6, 1, 17, C.gray);
+      p.rect(3, 22, 6, 2, C.dkgray2);
+      // lamp head
+      p.rect(3, 2, 6, 5, C.ink);
+      p.rect(4, 3, 4, 3, f === 0 ? C.yellow : C.cream);
+      p.px(5, 4, C.white);
+      p.rect(3, 1, 6, 1, C.gray);
+      // glow
+      p.g.globalAlpha = f === 0 ? 0.25 : 0.15;
+      p.disc(6, 4, f === 0 ? 5 : 4, C.yellow);
+      p.g.globalAlpha = 1;
+      frames.push(p.canvas);
+    }
+    return frames;
+  }
+
+  function caseSprite() {
+    const p = painter(16, 18);
+    // cabinet
+    p.rect(2, 4, 12, 13, C.brown);
+    p.rect(3, 5, 10, 10, C.steel);
+    p.rect(3, 5, 10, 10, C.cyan);
+    p.g.globalAlpha = 0.5; p.rect(4, 6, 4, 8, C.white); p.g.globalAlpha = 1; // glass glare
+    // little skull inside
+    p.rect(6, 9, 5, 4, C.white); p.px(7, 10, C.ink); p.px(9, 10, C.ink);
+    p.rect(2, 15, 12, 2, C.ltbrown);
+    p.rect(2, 3, 12, 1, C.ltbrown);
+    return p.canvas;
+  }
+
+  function carpetSprite() {
+    const p = painter(42, 14);
+    p.rect(1, 3, 40, 9, C.red);
+    p.rect(1, 3, 40, 1, C.salmon);
+    p.rect(1, 11, 40, 1, C.maroon);
+    p.rect(3, 5, 36, 5, C.maroon);
+    p.rect(4, 6, 34, 3, C.red);
+    // gold trim
+    p.rect(1, 2, 40, 1, C.gold);
+    p.rect(1, 12, 40, 1, C.gold);
+    for (let x = 4; x < 40; x += 6) p.px(x, 7, C.gold);
+    return p.canvas;
+  }
+
+  function archwaySprite() {
+    const p = painter(42, 40);
+    // two giant curved rib bones meeting at top
+    p.curve([[4, 39], [2, 24], [8, 10], [20, 4]], C.white, true);
+    p.curve([[38, 39], [40, 24], [34, 10], [22, 4]], C.white, true);
+    p.curve([[5, 39], [3, 24], [9, 11], [20, 6]], C.pale);
+    p.curve([[37, 39], [39, 24], [33, 11], [22, 6]], C.pale);
+    // keystone skull
+    p.rect(17, 2, 8, 6, C.white); p.px(19, 4, C.ink); p.px(22, 4, C.ink);
+    p.rect(18, 8, 6, 2, C.pale);
+    // bases
+    p.rect(2, 37, 8, 3, C.ltgray); p.rect(32, 37, 8, 3, C.ltgray);
+    return p.canvas;
+  }
+
+  function cafeSprite() {
+    const p = painter(32, 30);
+    // building
+    p.rect(3, 8, 26, 15, '#8f563b');
+    p.rect(3, 8, 26, 1, C.ltbrown);
+    p.rect(3, 22, 26, 1, C.brown);
+    // roof
+    p.rect(1, 4, 30, 5, C.teal);
+    p.rect(1, 4, 30, 1, C.cyan);
+    // striped awning
+    for (let x = 3; x < 29; x++) p.rect(x, 9, 1, 3, ((x / 3) | 0) % 2 ? C.cream : C.teal);
+    // window + door
+    p.rect(6, 13, 7, 7, C.cyan); p.rect(6, 13, 7, 1, C.steel);
+    p.px(7, 15, C.white);
+    p.rect(19, 12, 7, 11, C.brown); p.rect(20, 13, 5, 10, C.maroon); p.px(24, 18, C.cream);
+    // little table + cups out front
+    p.rect(6, 25, 5, 1, C.cream); p.rect(8, 26, 1, 3, C.gray);
+    p.px(7, 24, C.red); p.px(9, 24, C.yellow);
+    // sign
+    p.rect(11, 5, 10, 3, C.cream); Font.drawText(p.g, 'CAFE', 12, 5, C.maroon);
+    return p.canvas;
+  }
+
+  function theaterSprite() {
+    const p = painter(34, 32);
+    // dome
+    p.disc(17, 16, 13, C.navy);
+    p.disc(17, 16, 12, C.steel);
+    // paneling lines
+    for (let a = 0; a < 5; a++) { const t = (a / 4) * Math.PI; p.line(17, 16, 17 + Math.round(Math.cos(Math.PI + t) * 13), 16 + Math.round(Math.sin(Math.PI + t) * 13), C.navy); }
+    p.rect(3, 16, 28, 14, C.steel);
+    p.rect(3, 16, 28, 1, C.cyan);
+    // glowing entrance
+    p.rect(13, 20, 8, 10, C.ink);
+    p.rect(14, 21, 6, 9, C.purple);
+    p.px(16, 24, C.pink); p.px(18, 26, C.cyan);
+    // marquee lights
+    for (let x = 5; x < 30; x += 4) p.px(x, 17, C.yellow);
+    p.px(6, 6, C.white); p.px(9, 3, C.pale); // dome shine
+    return p.canvas;
+  }
+
+  function kioskSprite() {
+    const p = painter(18, 22);
+    // booth body
+    p.rect(3, 8, 12, 12, C.orange);
+    p.rect(3, 8, 12, 1, C.tan);
+    p.rect(3, 19, 12, 1, C.brown);
+    // roof
+    p.rect(1, 5, 16, 4, C.red);
+    p.rect(1, 5, 16, 1, C.salmon);
+    // window + counter
+    p.rect(5, 10, 8, 5, C.cyan); p.rect(5, 10, 8, 1, C.steel);
+    p.px(6, 12, C.white);
+    p.rect(4, 15, 10, 2, C.cream);
+    // ticket sign
+    p.rect(6, 6, 6, 2, C.yellow); p.px(8, 6, C.ink); p.px(10, 6, C.ink);
+    return p.canvas;
+  }
+
+  function diggerFrames() {
+    // tiny archaeologist swinging a pick, 2 frames, faces left
+    const frames = [];
+    for (let f = 0; f < 2; f++) {
+      const p = painter(12, 14);
+      // hat
+      p.rect(3, 1, 6, 2, C.orange); p.rect(2, 3, 8, 1, C.orange);
+      // head
+      p.rect(4, 3, 4, 3, C.cream); p.px(4, 4, C.ink);
+      // body
+      p.rect(4, 6, 4, 4, C.steel);
+      // legs
+      p.rect(4, 10, 2, 3, C.navy); p.rect(7, 10, 2, 3, C.navy);
+      // pick (swing up on f0, down on f1)
+      if (f === 0) { p.line(3, 6, 0, 2, C.ltbrown); p.line(0, 2, 2, 1, C.gray); }
+      else { p.line(3, 7, 1, 10, C.ltbrown); p.line(1, 10, 3, 11, C.gray); }
+      frames.push(p.canvas);
+    }
+    return frames;
+  }
+
   function sparkleFrames() {
     const a = painter(5, 5);
     a.px(2, 0, C.white); a.px(2, 4, C.white); a.px(0, 2, C.white); a.px(4, 2, C.white);
@@ -996,6 +1366,7 @@
       boulder: sprite(boulderRows, { L: C.ltgray, G: C.gray, S: C.dkgray2 }),
       gas: [sprite(gasRows1, { P: C.purple, L: C.pink }), sprite(gasRows2, { P: C.purple, L: C.pink })],
       sparkle: sparkleFrames(),
+      digger: diggerFrames(),
     };
 
     // skeletons by archetype
@@ -1008,6 +1379,15 @@
       trike: skelTrike(),
       anky: skelAnky(),
       flyer: skelFlyer(),
+      crested: skelCrested(),
+      dome: skelDome(),
+      claw: skelClaw(),
+      spino: skelSpino(),
+      plesio: skelPlesio(),
+      mosa: skelMosa(),
+      allo: skelAllo(),
+      diplo: skelDiplo(),
+      bigPtero: skelBigPtero(),
     };
 
     // visitors: variants x 2 frames, facing right; flipped for left
@@ -1033,7 +1413,7 @@
         const f = fossils[i];
         const skel = A.skel[f.skel] || A.skel.smallBiped;
         const col = (window.GameData.RARITY[f.rarity] || {}).color || C.ltgray;
-        A.exhibits[f.id] = exhibitSprite(skel, col, f.skel === 'flyer');
+        A.exhibits[f.id] = exhibitSprite(skel, col, f.skel === 'flyer' || f.skel === 'bigPtero');
       }
     }
 
@@ -1048,6 +1428,15 @@
       restroom: restroom(),
       entrance: entranceArch(),
       sign: sprite(signRows, { N: C.brown, T: C.tan, C: C.cream }),
+      palm: palmSprite(),
+      topiary: topiarySprite(),
+      lamp: lampFrames(),
+      case: caseSprite(),
+      carpet: carpetSprite(),
+      archway: archwaySprite(),
+      cafe: cafeSprite(),
+      theater: theaterSprite(),
+      kiosk: kioskSprite(),
     };
 
     A.shadows = {
