@@ -377,16 +377,50 @@
     return { cs: cs, n: n, gx: gx, gy: gy, gw: gw };
   }
 
-  function drawPieceCells(ctx, cells, ox, oy, cs, rarity, alpha) {
+  // A single stony fossil-in-matrix cell. `edges` says which sides are the
+  // outer edge of the block (so a multi-cell piece reads as one carved slab).
+  function stoneCell(ctx, x, y, cs, rc, seed, edges) {
+    const rng = A.rng(seed >>> 0);
+    ctx.fillStyle = rc.color; ctx.fillRect(x, y, cs, cs);
+    // rocky matrix mottling (dark) + grit (light)
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    for (let k = 0; k < 3; k++) ctx.fillRect(x + (rng() * cs | 0), y + (rng() * cs | 0), 1, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    for (let k = 0; k < 3; k++) ctx.fillRect(x + (rng() * cs | 0), y + (rng() * cs | 0), 1, 1);
+    // an embedded bone fragment
+    if (cs >= 8) {
+      const bx = x + 2 + (rng() * (cs - 5) | 0), by = y + 2 + (rng() * (cs - 5) | 0);
+      ctx.fillStyle = 'rgba(255,250,240,0.85)';
+      ctx.fillRect(bx, by, 3, 1); ctx.fillRect(bx - 1, by - 1, 1, 1); ctx.fillRect(bx + 3, by - 1, 1, 1);
+      ctx.fillRect(bx - 1, by + 1, 1, 1); ctx.fillRect(bx + 3, by + 1, 1, 1);
+    } else {
+      ctx.fillStyle = 'rgba(255,250,240,0.7)'; ctx.fillRect(x + (cs >> 1) - 1, y + (cs >> 1) - 1, 2, 2);
+    }
+    // inner seams (subtle) so touching cells still show separation
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    if (!edges.right) ctx.fillRect(x + cs - 1, y, 1, cs);
+    if (!edges.bottom) ctx.fillRect(x, y + cs - 1, cs, 1);
+    // outer bevel: light top/left, dark bottom/right
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    if (edges.top) ctx.fillRect(x, y, cs, 1);
+    if (edges.left) ctx.fillRect(x, y, 1, cs);
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    if (edges.bottom) ctx.fillRect(x, y + cs - 1, cs, 1);
+    if (edges.right) ctx.fillRect(x + cs - 1, y, 1, cs);
+  }
+
+  function drawPieceCells(ctx, cells, ox, oy, cs, rarity, alpha, seed) {
     const rc = D.RARITY[rarity] || D.RARITY.common;
     ctx.globalAlpha = alpha == null ? 1 : alpha;
+    const occ = {}; for (let i = 0; i < cells.length; i++) occ[cells[i][0] + ',' + cells[i][1]] = true;
+    const base = (seed || 1) * 2654435761;
     for (let i = 0; i < cells.length; i++) {
-      const x = ox + cells[i][0] * cs, y = oy + cells[i][1] * cs;
-      ctx.fillStyle = rc.color; ctx.fillRect(x, y, cs, cs);
-      ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x, y, cs, 2); ctx.fillRect(x, y, 2, cs);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x, y + cs - 2, cs, 2); ctx.fillRect(x + cs - 2, y, 2, cs);
-      // bone speck
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(x + cs / 2 - 1, y + cs / 2 - 1, 2, 2);
+      const gx = cells[i][0], gy = cells[i][1];
+      const x = ox + gx * cs, y = oy + gy * cs;
+      stoneCell(ctx, x, y, cs, rc, (base ^ (gx * 73856093) ^ (gy * 19349663)) >>> 0, {
+        top: !occ[gx + ',' + (gy - 1)], left: !occ[(gx - 1) + ',' + gy],
+        bottom: !occ[gx + ',' + (gy + 1)], right: !occ[(gx + 1) + ',' + gy],
+      });
     }
     ctx.globalAlpha = 1;
   }
@@ -414,14 +448,21 @@
       clearMark = predictClears(active, ghost.gx, ghost.gy, L.n);
     }
 
+    const sameId = function (x, y, id) { const c = Inv.at(x, y); return c && c.id === id; };
     for (let y = 0; y < L.n; y++) for (let x = 0; x < L.n; x++) {
       const px = L.gx + x * L.cs, py = L.gy + y * L.cs;
       const cell = Inv.at(x, y);
-      // slot
+      // empty slot
       ctx.fillStyle = (x + y) % 2 === 0 ? '#252838' : '#20222f';
       ctx.fillRect(px, py, L.cs - 1, L.cs - 1);
       if (clearMark[y * L.n + x]) { ctx.fillStyle = 'rgba(255,240,120,0.18)'; ctx.fillRect(px, py, L.cs - 1, L.cs - 1); }
-      if (cell) drawPieceCells(ctx, [[0, 0]], px, py, L.cs, cell.rarity, 1);
+      if (cell) {
+        const rc = D.RARITY[cell.rarity] || D.RARITY.common;
+        stoneCell(ctx, px, py, L.cs, rc, ((x * 73856093) ^ (y * 19349663)) >>> 0, {
+          top: !sameId(x, y - 1, cell.id), left: !sameId(x - 1, y, cell.id),
+          bottom: !sameId(x, y + 1, cell.id), right: !sameId(x + 1, y, cell.id),
+        });
+      }
     }
 
     // ghost preview of active piece

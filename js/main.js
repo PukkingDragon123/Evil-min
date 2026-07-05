@@ -27,6 +27,7 @@
   // APP STATE
   // =========================================================================
   const app = {
+    screen: 'menu', menuView: 'main', offlineShown: false,
     tab: 'museum', siteId: 'quarry',
     editMode: false, placement: null, selectedItem: -1,
     modal: null, scrollY: 0, scrollMax: 0, scrollRegion: null,
@@ -34,6 +35,18 @@
     invGhost: null, invLayout: null, digCursor: null, digLayout: null,
     hold: null, digAnims: [], offlineData: null,
 
+    openMenu: function () { this.screen = 'menu'; this.menuView = 'main'; this.hold = null; this.modal = null; },
+    enterGame: function () {
+      this.menuView = 'main'; this.screen = 'game'; const st = S.get();
+      if (st.firstRun) { st.firstRun = false; window.Tutorial.begin(); this.tab = 'museum'; S.saveSoon(); }
+      if (this.offlineData && !this.offlineShown) { this.offlineShown = true; this.openModal('offline'); }
+    },
+    newGame: function () {
+      S.reset(); window.Tutorial.begin();
+      this.menuView = 'main'; this.screen = 'game'; this.tab = 'museum'; this.siteId = 'quarry';
+      this.activePiece = 0; this.selectedItem = -1; this.editMode = false; this.placement = null;
+      this.offlineData = null; this.offlineShown = true;
+    },
     setTab: function (id) { this.tab = id; this.editMode = false; this.selectedItem = -1; if (id !== 'museum' && this.placement) this.cancelPlacement(); if (id === 'storage') this.activePiece = Math.min(this.activePiece, Math.max(0, S.get().queue.length - 1)); emit('tab' + id.charAt(0).toUpperCase() + id.slice(1)); },
     openModal: function (n) { this.modal = n; this.scrollY = 0; },
     closeModal: function () { this.modal = null; },
@@ -83,7 +96,7 @@
     app.hold = null;
     if (app.modal && app.scrollRegion && inRect(x, y, app.scrollRegion)) scrollDragging = true;
     // press-and-hold a dig tile to send an excavation team
-    if (app.tab === 'dig' && !app.modal && app.digLayout) {
+    if (app.screen === 'game' && app.tab === 'dig' && !app.modal && app.digLayout) {
       const cell = R.screenToDigCell(app.digLayout, x, y);
       if (cell) {
         const b = Dig.getBoard(D.siteById(app.siteId));
@@ -112,7 +125,7 @@
     if (moved) return;
     if (held && held.done) return;      // the hold already sent a dig team
     if (UI.handleTap(x, y)) return;
-    if (app.modal) return;
+    if (app.modal || app.screen !== 'game') return;
     if (app.tab === 'dig') { if (held) handleDigSurvey(held.x, held.y); }  // quick tap = survey
     else if (app.tab === 'storage') handleStorageTap(x, y);
     else if (app.tab === 'museum') handleMuseumTap(x, y);
@@ -256,7 +269,7 @@
   canvas.addEventListener('contextmenu', function (e) {
     e.preventDefault(); const p = toLogical(e.clientX, e.clientY);
     // right-click = quick "send a dig team" (excavate) on desktop
-    if (app.tab === 'dig' && !app.modal && app.digLayout) {
+    if (app.screen === 'game' && app.tab === 'dig' && !app.modal && app.digLayout) {
       const cell = R.screenToDigCell(app.digLayout, p.x, p.y);
       if (cell) { app.hold = null; handleDigExcavate(cell.x, cell.y); }
     }
@@ -294,7 +307,19 @@
   function frame(now) {
     if (!last) last = now; let dt = now - last; last = now; if (dt > 100) dt = 100;
 
-    S.tickEnergy(dt); window.Museum.update(dt); FX.update(dt); UI.tickToasts(dt);
+    FX.update(dt); UI.tickToasts(dt);
+    ctx.imageSmoothingEnabled = false;
+
+    // --- title / menu screen ---
+    if (app.screen === 'menu') {
+      UI.reset();
+      UI.drawMenu(ctx, now, app);
+      UI.drawToasts(ctx);
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    S.tickEnergy(dt); window.Museum.update(dt);
     for (let i = app.digAnims.length - 1; i >= 0; i--) { app.digAnims[i].life += dt; if (app.digAnims[i].life > app.digAnims[i].ttl) app.digAnims.splice(i, 1); }
 
     visitorEmit += dt;
@@ -309,7 +334,6 @@
     const lvl = S.get().level;
     if (lvl > levelWatch) { levelWatch = lvl; Au.play('levelup'); UI.toast('Level up! Now level ' + lvl, C().gold, window.Assets.icons.gem); FX.confetti(VW / 2, R.HUD_H + 20, 30); }
 
-    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#14121f'; ctx.fillRect(0, 0, VW, VH);
     const so = FX.shakeOffset();
     ctx.save(); ctx.translate(Math.round(so.x), Math.round(so.y));
@@ -359,12 +383,9 @@
     for (let i = 0; i < D.SITES.length; i++) if (st.sites[D.SITES[i].id]) app.siteId = D.SITES[i].id;
     if (!st.sites[app.siteId]) app.siteId = 'quarry';
 
-    if (!had || st.firstRun) {
-      // first run: hand off to Doc's interactive tutorial (no modal to dismiss)
-      st.firstRun = false; window.Tutorial.begin(); app.tab = 'museum'; S.saveSoon();
-    } else {
-      const off = S.claimOffline(); if (off) { app.offlineData = off; app.openModal('offline'); } app.tab = 'museum';
-    }
+    // always open on the title screen; PLAY/CONTINUE enters the game
+    app.screen = 'menu'; app.menuView = 'main'; app.tab = 'museum';
+    if (had && !st.firstRun) { const off = S.claimOffline(); if (off) app.offlineData = off; }
 
     resize();
     requestAnimationFrame(frame);

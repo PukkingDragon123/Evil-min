@@ -116,9 +116,9 @@
     button(ctx, VW - 52, y - 1, 15, 14, 'Q', { color: C.gold }, function () { Au.play('click'); app.openModal('quests'); });
     if (window.Quests) { const nx = window.Quests.next(); if (nx) { ctx.fillStyle = C.salmon; ctx.fillRect(VW - 40, y - 2, 4, 4); } }
     button(ctx, VW - 35, y - 1, 15, 14, '*', { color: C.teal }, function () { Au.play('click'); app.openModal('upgrades'); });
-    button(ctx, VW - 18, y - 1, 15, 14, Au.isMuted() ? 'x' : '=', { color: Au.isMuted() ? C.dkgray2 : C.teal }, function () {
-      Au.setMuted(!Au.isMuted()); S.get().muted = Au.isMuted(); S.saveSoon(); Au.play('click');
-    });
+    // menu / pause button (hamburger)
+    button(ctx, VW - 18, y - 1, 15, 14, '', { color: C.steel }, function () { Au.play('click'); app.openMenu(); });
+    ctx.fillStyle = C.white; for (let i = 0; i < 3; i++) ctx.fillRect(VW - 15, y + 2 + i * 3, 9, 1);
   }
 
   // =========================================================================
@@ -583,32 +583,154 @@
     if (key === 'quests') return { x: VW - 52, y: 5, w: 15, h: 14 };
     return null;
   }
+  function grad(ctx, x, y, w, h, c0, c1) { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, c0); g.addColorStop(1, c1); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); }
+  function rrect(ctx, x, y, w, h, fill, border) {
+    ctx.fillStyle = border; ctx.fillRect(x + 1, y, w - 2, h); ctx.fillRect(x, y + 1, w, h - 2);
+    ctx.fillStyle = fill; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  }
+
+  // --- museum rating (a sense of progression / completeness) ---------------
+  const RATINGS = [
+    { min: 0, name: 'Roadside Curio', stars: 0 }, { min: 120, name: 'Local Museum', stars: 1 },
+    { min: 500, name: 'City Museum', stars: 2 }, { min: 1500, name: 'National Museum', stars: 3 },
+    { min: 4000, name: 'World-Class Museum', stars: 4 }, { min: 10000, name: 'Legendary Institution', stars: 5 },
+  ];
+  function ratingFor(w) { let r = RATINGS[0]; for (let i = 0; i < RATINGS.length; i++) if (w >= RATINGS[i].min) r = RATINGS[i]; return r; }
+  function uniqueMounted() { const st = S.get(); let n = 0; for (let i = 0; i < D.FOSSILS.length; i++) if ((st.mounted[D.FOSSILS[i].id] || 0) > 0) n++; return n; }
+
+  // =========================================================================
+  // TITLE / MENU SCREEN
+  // =========================================================================
+  function drawMenu(ctx, t, app) {
+    const st = S.get();
+    grad(ctx, 0, 0, VW, VH, '#3a2f5c', '#161228');
+    // parallax strata / horizon
+    grad(ctx, 0, 150, VW, 120, '#4a3a52', '#2c2438');
+    ctx.fillStyle = '#241f30';
+    for (let i = 0; i < 5; i++) { const bx = ((t / (40 + i * 10)) + i * 120) % (VW + 80) - 40; ctx.fillRect(bx, 150 - i * 4, 60, 40); }
+    // drifting specimen curios
+    const drift = ['ammonite', 'fern', 'trilobite', 'ginkgo', 'nautilus'];
+    ctx.globalAlpha = 0.5;
+    for (let i = 0; i < drift.length; i++) {
+      const img = A.curios[drift[i]]; if (!img) continue;
+      const x = ((t / (60 + i * 25) + i * 90) % (VW + 40)) - 20, y = 26 + i * 9 + Math.sin(t / 500 + i) * 4;
+      ctx.drawImage(img, Math.round(x), Math.round(y));
+    }
+    ctx.globalAlpha = 1;
+    // watermark rex behind the title
+    ctx.globalAlpha = 0.12; R.blit(ctx, A.skel.bigTheropod, VW / 2, 78, 96, 3); ctx.globalAlpha = 1;
+
+    // title
+    Font.drawText(ctx, 'DINO DIG', VW / 2, 30, C.cyan, { align: 1, scale: 5, shadow: C.maroon });
+    Font.drawText(ctx, 'MUSEUM', VW / 2, 72, C.gold, { align: 1, scale: 4, shadow: C.maroon });
+    Font.drawText(ctx, 'EXCAVATE  -  BUILD  -  COLLECT', VW / 2, 100, C.pale, { align: 1 });
+
+    if (app.menuView === 'credits') { drawCredits(ctx, app); return; }
+    if (app.menuView === 'confirm') { drawConfirm(ctx, app); return; }
+
+    // Doc mascot waving in the corner
+    const mframe = A.mascot[(t / 450 | 0) % 2];
+    ctx.drawImage(A.shadows.s16, 24, VH - 20);
+    ctx.drawImage(mframe, 18, VH - 20 - mframe.height + Math.round(Math.sin(t / 300)));
+
+    // primary buttons
+    const started = !st.firstRun;
+    button(ctx, VW / 2 - 70, 118, 140, 24, started ? 'CONTINUE' : 'START GAME', { color: C.green, scale: 2 }, function () { Au.play('newarea'); app.enterGame(); });
+    button(ctx, VW / 2 - 70, 148, 66, 14, 'NEW GAME', { color: C.steel }, function () { Au.play('click'); app.menuView = 'confirm'; });
+    button(ctx, VW / 2 + 4, 148, 66, 14, Au.isMuted() ? 'UNMUTE' : 'MUTE', { color: C.teal }, function () { Au.setMuted(!Au.isMuted()); st.muted = Au.isMuted(); S.saveSoon(); Au.play('click'); });
+    button(ctx, VW / 2 - 70, 166, 140, 12, 'CREDITS & STATS', { color: C.purple }, function () { Au.play('click'); app.menuView = 'credits'; });
+
+    // save summary + rating
+    if (started) {
+      const stats = S.computeStats(); const r = ratingFor(stats.wonder);
+      panel(ctx, VW / 2 - 96, 186, 192, 30, 'rgba(20,18,31,0.7)', C.gold);
+      Font.drawText(ctx, 'RATING: ' + r.name, VW / 2, 190, C.cyan, { align: 1 });
+      let s = ''; for (let i = 0; i < 5; i++) s += i < r.stars ? '★' : '.';
+      Font.drawText(ctx, s, VW / 2, 199, C.yellow, { align: 1 });
+      Font.drawText(ctx, 'Lv ' + st.level + '  ·  ' + uniqueMounted() + '/' + D.FOSSILS.length + ' species  ·  ' + S.uniqueCurios() + '/' + D.CURIOS.length + ' specimens', VW / 2, 208, C.pale, { align: 1 });
+    }
+    Font.drawText(ctx, 'a pixel excavation tycoon', VW / 2, VH - 10, C.dkgray, { align: 1 });
+  }
+
+  function drawCredits(ctx, app) {
+    const st = S.get(); const stats = S.computeStats();
+    const w = 300, h = 164, x = (VW - w) / 2, y = 104;
+    panel(ctx, x, y, w, h, '#232038', C.gold);
+    Font.drawText(ctx, 'MUSEUM RECORDS', x + w / 2, y + 6, C.cyan, { align: 1, shadow: C.ink });
+    const rows = [
+      ['Museum rating', ratingFor(stats.wonder).name],
+      ['Wonder', fmt(stats.wonder)],
+      ['Species mounted', uniqueMounted() + ' / ' + D.FOSSILS.length],
+      ['Specimens found', S.uniqueCurios() + ' / ' + D.CURIOS.length],
+      ['Sites unlocked', Object.keys(st.sites).filter(function (k) { return st.sites[k]; }).length + ' / ' + D.SITES.length],
+      ['Floors owned', st.floors.filter(function (f) { return f.unlocked; }).length + ' / ' + D.FLOORS.length],
+      ['Deepest dig', 'Depth ' + (st.stats.deepest || 1)],
+      ['Fossils extracted', st.stats.extracted || 0],
+    ];
+    for (let i = 0; i < rows.length; i++) {
+      const ry = y + 20 + i * 13;
+      Font.drawText(ctx, rows[i][0], x + 10, ry, C.pale);
+      Font.drawText(ctx, String(rows[i][1]), x + w - 10, ry, C.yellow, { align: 2 });
+    }
+    const complete = uniqueMounted() >= D.FOSSILS.length && S.uniqueCurios() >= D.CURIOS.length;
+    if (complete) Font.drawText(ctx, '* COLLECTION COMPLETE! *', x + w / 2, y + h - 34, C.gold, { align: 1, shadow: C.maroon });
+    Font.drawText(ctx, 'Built with Claude Code', x + w / 2, y + h - 24, C.gray, { align: 1 });
+    button(ctx, x + w / 2 - 30, y + h - 13, 60, 10, 'BACK', { color: C.steel }, function () { Au.play('click'); app.menuView = 'main'; });
+  }
+
+  function drawConfirm(ctx, app) {
+    const w = 240, h = 96, x = (VW - w) / 2, y = 120;
+    panel(ctx, x, y, w, h, '#232038', C.red);
+    Font.drawText(ctx, 'START A NEW GAME?', x + w / 2, y + 12, C.salmon, { align: 1, scale: 2, shadow: C.ink });
+    Font.drawText(ctx, 'This erases all of your', x + w / 2, y + 34, C.pale, { align: 1 });
+    Font.drawText(ctx, 'current museum progress.', x + w / 2, y + 44, C.pale, { align: 1 });
+    button(ctx, x + 16, y + h - 24, 90, 16, 'YES, RESET', { color: C.red }, function () { Au.play('buy'); app.newGame(); });
+    button(ctx, x + w - 106, y + h - 24, 90, 16, 'CANCEL', { color: C.steel }, function () { Au.play('click'); app.menuView = 'main'; });
+  }
+
+  // =========================================================================
+  // POLISHED TUTORIAL (Doc)
+  // =========================================================================
   function drawTutorial(ctx, t, app) {
     const Tut = window.Tutorial; if (!Tut || !Tut.active()) return;
     const step = Tut.current(); if (!step) return;
-    // highlight
+    const last = Tut.stepIndex() >= Tut.total() - 1;
+
+    // highlight box + bobbing arrow over the target
     const hr = highlightRect(step.highlight);
     if (hr) {
       const pulse = Math.sin(t / 220) * 0.5 + 0.5;
       ctx.strokeStyle = C.yellow; ctx.lineWidth = 2; ctx.globalAlpha = 0.5 + pulse * 0.5;
-      ctx.strokeRect(hr.x + 1, hr.y + 1, hr.w - 2, hr.h - 2); ctx.globalAlpha = 1;
+      ctx.strokeRect(hr.x + 1, hr.y + 1, hr.w - 2, hr.h - 2);
+      ctx.globalAlpha = 1;
+      // arrow pointing at it (from whichever side has room)
+      const ax = hr.x + hr.w / 2, bob = Math.round(Math.sin(t / 180) * 2);
+      ctx.fillStyle = C.yellow;
+      if (hr.y > VH / 2) { const ay = hr.y - 6 + bob; tri(ctx, ax, ay + 4, 4, 1); }      // arrow points down onto a bottom target
+      else { const ay = hr.y + hr.h + 6 - bob; tri(ctx, ax, ay - 4, 4, -1); }             // points up
     }
-    // mascot bottom-left
-    const mframe = A.mascot[(t / 500 | 0) % 2];
-    const mx = 30, my = VH - TAB_H - 6;
-    ctx.drawImage(A.shadows.s16, Math.round(mx - 8), Math.round(my - 3));
-    ctx.drawImage(mframe, Math.round(mx - mframe.width / 2), Math.round(my - mframe.height));
-    // speech bubble
-    const bx = mx + 20, by = HUD_H + 60, bw = VW - bx - 12, bh = 66;
-    panel(ctx, bx, by, bw, bh, '#fbf6e8', C.gold);
-    Font.drawText(ctx, 'DOC says:', bx + 6, by + 5, C.orange);
-    Font.drawTextWrapped(ctx, step.text, bx + 6, by + 15, bw - 12, C.ink);
-    // little pointer tail toward mascot
-    ctx.fillStyle = '#fbf6e8'; ctx.fillRect(bx - 3, by + bh - 14, 4, 6);
-    Font.drawText(ctx, 'Step ' + (Tut.stepIndex() + 1) + '/' + Tut.total(), bx + 6, by + bh - 10, C.gray);
-    button(ctx, bx + bw - 84, by + bh - 13, 40, 11, 'NEXT', { color: C.steel }, function () { Au.play('click'); Tut.next(); });
+
+    // Doc portrait on a little stage, bottom-left
+    const mframe = A.mascot[(t / 400 | 0) % 2];
+    const mx = 32, my = VH - 8, bobm = Math.round(Math.sin(t / 260));
+    ctx.fillStyle = 'rgba(20,18,31,0.6)'; ctx.fillRect(mx - 22, my - 6, 44, 6);
+    ctx.drawImage(A.shadows.s16, Math.round(mx - 8), Math.round(my - 5));
+    ctx.drawImage(mframe, Math.round(mx - mframe.width / 2), Math.round(my - mframe.height + bobm));
+
+    // speech bubble with tail toward Doc
+    const bx = mx + 22, by = HUD_H + 52, bw = VW - bx - 10, bh = 74;
+    rrect(ctx, bx, by, bw, bh, '#fbf6e8', C.gold);
+    ctx.fillStyle = '#fbf6e8'; ctx.fillRect(bx - 4, by + bh - 20, 6, 8); ctx.fillRect(bx - 7, by + bh - 14, 4, 6);
+    // name tag
+    ctx.fillStyle = C.orange; ctx.fillRect(bx + 4, by + 3, 40, 9);
+    Font.drawText(ctx, 'DOC', bx + 24, by + 4, C.white, { align: 1 });
+    Font.drawTextWrapped(ctx, step.text, bx + 6, by + 16, bw - 12, C.ink);
+    // progress dots
+    for (let i = 0; i < Tut.total(); i++) { ctx.fillStyle = i <= Tut.stepIndex() ? C.orange : '#d9c9a8'; ctx.fillRect(bx + 6 + i * 7, by + bh - 9, 4, 4); }
+    button(ctx, bx + bw - 96, by + bh - 13, 52, 11, last ? "LET'S GO!" : 'NEXT', { color: C.green }, function () { Au.play('click'); Tut.next(); });
     button(ctx, bx + bw - 42, by + bh - 13, 38, 11, 'SKIP', { color: C.dkgray2 }, function () { Au.play('click'); Tut.skip(); });
   }
+  function tri(ctx, cx, cy, r, dir) { for (let i = 0; i <= r; i++) ctx.fillRect(cx - (r - i), cy + dir * i, (r - i) * 2 + 1, 1); }
 
   function drawIntro(ctx, t, app) {
     ctx.fillStyle = 'rgba(12,11,22,0.9)'; ctx.fillRect(0, 0, VW, VH);
@@ -668,6 +790,7 @@
     drawDigOverlay: drawDigOverlay, drawStorageOverlay: drawStorageOverlay, drawShop: drawShop,
     drawCollection: drawCollection, drawSites: drawSites, drawUpgrades: drawUpgrades,
     drawStaff: drawStaff, drawQuests: drawQuests, drawTutorial: drawTutorial,
+    drawMenu: drawMenu, ratingFor: ratingFor,
     drawIntro: drawIntro, drawOffline: drawOffline, drawToasts: drawToasts,
     fmt: fmt, displayName: displayName,
   };
