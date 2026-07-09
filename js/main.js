@@ -47,6 +47,7 @@
       this.menuView = 'main'; this.screen = 'game'; this.tab = 'museum'; this.siteId = 'quarry';
       this.activePiece = 0; this.selectedItem = -1; this.editMode = false; this.placement = null;
       this.offlineData = null; this.offlineShown = true;
+      this.streak = 0; this.expSelected = null; this.hold = null; this.digAnims = [];
     },
     setTab: function (id) { this.tab = id; this.editMode = false; this.selectedItem = -1; if (id !== 'museum' && this.placement) this.cancelPlacement(); if (id === 'storage') this.activePiece = Math.min(this.activePiece, Math.max(0, S.get().queue.length - 1)); emit('tab' + id.charAt(0).toUpperCase() + id.slice(1)); },
     openModal: function (n) { this.modal = n; this.scrollY = 0; },
@@ -102,7 +103,8 @@
       if (cell) {
         const b = Dig.getBoard(D.siteById(app.siteId));
         const c = b.cells[cell.y * b.cols + cell.x];
-        if (!c.revealed && !c.extracted) app.hold = { x: cell.x, y: cell.y, elapsed: 0, done: false };
+        // guard against a stale layout pointing outside the current board
+        if (c && !c.revealed && !c.extracted) app.hold = { x: cell.x, y: cell.y, elapsed: 0, done: false };
       }
     }
   }

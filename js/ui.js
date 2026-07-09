@@ -499,7 +499,8 @@
     if (!app.expSelected) app.expSelected = app.siteId;
     for (let i = 0; i < D.SITES.length; i++) {
       const site = D.SITES[i]; const biome = D.BIOMES[site.biome];
-      const nx = EXP_POS[i][0], ny = my - 26 + EXP_POS[i][1];
+      const pos = EXP_POS[i] || [48 + (i * 66) % (mw - 60), i % 2 ? 66 : 116];
+      const nx = pos[0], ny = my - 26 + pos[1];
       const unlocked = !!st.sites[site.id];
       const selected = app.expSelected === site.id;
       // medallion
