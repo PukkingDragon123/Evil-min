@@ -38,10 +38,10 @@
     },
     {
       id: 'survey', name: 'Survey Kit', icon: 'lens', max: 5,
-      desc: 'Careful surveying - accidental finds stay more intact.',
+      desc: 'Chance to rescue a fossil your survey accidentally crushes.',
       cost: function (l) { return { coins: 500 + l * 800, gems: 0 }; },
-      value: function (l) { return 0.15 + l * 0.17; },// pristine chance on survey-hit
-      fmt: function (l) { return Math.round((0.15 + l * 0.17) * 100) + '% intact'; },
+      value: function (l) { return 0.15 + l * 0.17; },// rescue chance on survey-hit
+      fmt: function (l) { return Math.round((0.15 + l * 0.17) * 100) + '% rescue'; },
     },
     {
       id: 'income', name: 'Marketing', icon: 'coin', max: 6,

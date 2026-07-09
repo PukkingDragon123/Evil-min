@@ -222,32 +222,109 @@
   // =========================================================================
   function computeDigLayout(site, board) {
     const cols = board ? board.cols : site.cols, rows = board ? board.rows : site.rows;
-    const availW = VW - 16, availH = CONTENT.h - 30;
+    const availW = VW - 16, availH = CONTENT.y + CONTENT.h - HORIZON - 10;
     let ts = Math.floor(Math.min(availW / cols, availH / rows));
     ts = Math.max(13, Math.min(26, ts));
     const boardW = ts * cols, boardH = ts * rows;
     const bx = Math.round((VW - boardW) / 2);
-    const by = Math.round(CONTENT.y + 30 + (availH - boardH) / 2);
+    const by = Math.round(HORIZON + 7 + (availH - boardH) / 2);
     return { ts: ts, bx: bx, by: by, boardW: boardW, boardH: boardH, cols: cols, rows: rows };
   }
 
-  function drawDigBackground(ctx, biome) {
-    vgrad(ctx, CONTENT.x, CONTENT.y, CONTENT.w, CONTENT.h, biome.sky[0], biome.sky[1]);
-    // strata bands
-    const bands = biome.soil;
-    let y = CONTENT.y + 40;
+  const HORIZON = CONTENT.y + 38;
+
+  function drawDigBackground(ctx, biome, biomeKey, t) {
+    // --- sky ---
+    vgrad(ctx, CONTENT.x, CONTENT.y, CONTENT.w, HORIZON - CONTENT.y, biome.sky[0], biome.sky[1]);
+    const name = biome.name;
+    if (name === 'Desert' || name === 'Temperate' || name === 'Jungle') {
+      // sun with glow
+      softGlow(ctx, VW - 60, CONTENT.y + 12, 18, '#fff2a0', 0.35);
+      ctx.fillStyle = C.yellow; pixDisc(ctx, VW - 60, CONTENT.y + 12, 6);
+      ctx.fillStyle = '#fffab0'; pixDisc(ctx, VW - 62, CONTENT.y + 11, 3);
+    } else if (name === 'Frozen') {
+      // moon + aurora ribbons
+      ctx.fillStyle = C.pale; pixDisc(ctx, VW - 64, CONTENT.y + 11, 5);
+      ctx.fillStyle = biome.sky[0]; pixDisc(ctx, VW - 67, CONTENT.y + 10, 4);
+      for (let band = 0; band < 2; band++) {
+        ctx.globalAlpha = 0.16 - band * 0.05;
+        ctx.fillStyle = band === 0 ? '#7ee0c0' : '#b090ff';
+        for (let x = 0; x < VW; x += 4) {
+          const wy = CONTENT.y + 6 + band * 5 + Math.sin(x * 0.03 + t / 900 + band) * 4;
+          ctx.fillRect(x, wy, 4, 8);
+        }
+        ctx.globalAlpha = 1;
+      }
+    } else if (name === 'Volcanic') {
+      softGlow(ctx, VW / 2, HORIZON, 60, '#df7126', 0.2);
+      ctx.fillStyle = 'rgba(223,113,38,0.5)'; // smoldering sky specks
+      for (let i = 0; i < 4; i++) ctx.fillRect(((t / (30 + i * 9)) + i * 130) % VW, CONTENT.y + 6 + (i * 7) % 22, 2, 2);
+    } else if (name === 'Seabed') {
+      // god rays + drifting bubbles
+      ctx.globalAlpha = 0.14; ctx.fillStyle = '#bfeee6';
+      for (let i = 0; i < 3; i++) {
+        const rx = 60 + i * 150 + Math.sin(t / 1400 + i) * 12;
+        ctx.beginPath(); ctx.moveTo(rx, CONTENT.y); ctx.lineTo(rx + 26, CONTENT.y);
+        ctx.lineTo(rx + 46, HORIZON); ctx.lineTo(rx, HORIZON); ctx.closePath(); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    } else if (name === 'Deep Strata') {
+      // cave sparkles
+      ctx.fillStyle = 'rgba(217,176,238,0.6)';
+      const rr0 = A.rng(808);
+      for (let i = 0; i < 8; i++) { const sx = rr0() * VW, sy = CONTENT.y + rr0() * 30; if (((t / 400) | 0) % 3 !== i % 3) ctx.fillRect(sx | 0, sy | 0, 1, 1); }
+    }
+    // drifting cloud layers (surface biomes only)
+    if (name !== 'Seabed' && name !== 'Deep Strata') {
+      for (let layer = 0; layer < 2; layer++) {
+        ctx.globalAlpha = 0.12 + layer * 0.06;
+        ctx.fillStyle = '#ffffff';
+        const speed = 26 - layer * 12, size = 34 - layer * 10;
+        for (let i = 0; i < 3; i++) {
+          const cx = ((t / (1000 / speed) + i * 190 + layer * 90) % (VW + size * 2)) - size;
+          const cy = CONTENT.y + 5 + layer * 9 + i * 3;
+          ctx.fillRect(cx, cy + 2, size, 4); ctx.fillRect(cx + 5, cy, size - 12, 3);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // --- distant ridge + horizon props ---
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let x = 0; x < VW; x += 3) {
+      const rh = 5 + Math.round(Math.sin(x * 0.05) * 3 + Math.sin(x * 0.013) * 4);
+      ctx.fillRect(x, HORIZON - rh, 3, rh);
+    }
+    const props = A.props[biomeKey] || [];
+    const rr = A.rng(biomeKey.length * 977 + 5);
+    for (let i = 0; i < 7; i++) {
+      const pr = props[i % props.length]; if (!pr) break;
+      const px = 10 + ((rr() * (VW - 40)) | 0);
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(pr, px, HORIZON - pr.height + 2);
+      ctx.globalAlpha = 1;
+    }
+
+    // --- ground below horizon: soil gradient + strata ---
+    vgrad(ctx, CONTENT.x, HORIZON, CONTENT.w, CONTENT.y + CONTENT.h - HORIZON, biome.soil[1], shade(biome.soil[2], 0.7));
+    let y = HORIZON + 26;
     for (let i = 0; i < 6 && y < CONTENT.y + CONTENT.h; i++) {
-      ctx.fillStyle = bands[i % bands.length];
-      const h = 22 + (i % 2) * 10;
-      ctx.globalAlpha = 0.5 - i * 0.03;
+      ctx.fillStyle = biome.soil[i % biome.soil.length];
+      const h = 20 + (i % 2) * 10;
+      ctx.globalAlpha = 0.35 - i * 0.04;
       ctx.fillRect(CONTENT.x, y, CONTENT.w, h);
       y += h; ctx.globalAlpha = 1;
     }
-    // fossil silhouettes faint in the strata
-    ctx.globalAlpha = 0.06; ctx.fillStyle = '#000';
-    const rr = A.rng(555);
-    for (let i = 0; i < 5; i++) ctx.fillRect(CONTENT.x + (rr() * CONTENT.w) | 0, CONTENT.y + 60 + (rr() * (CONTENT.h - 70)) | 0, 12, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(CONTENT.x, HORIZON, CONTENT.w, 2);
+    // buried fossil silhouettes
+    ctx.globalAlpha = 0.07; ctx.fillStyle = '#000';
+    const rr2 = A.rng(555);
+    for (let i = 0; i < 6; i++) ctx.fillRect(CONTENT.x + (rr2() * CONTENT.w) | 0, HORIZON + 24 + (rr2() * (CONTENT.h - 70)) | 0, 12, 3);
     ctx.globalAlpha = 1;
+  }
+
+  function pixDisc(ctx, cx, cy, r) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + r * 0.5) ctx.fillRect(cx + dx, cy + dy, 1, 1);
   }
 
   function drawDigTile(ctx, cell, px, py, ts, biome, t, hover) {
@@ -303,12 +380,29 @@
 
   function drawDig(ctx, t, site, board, cursor, hold, anims) {
     const biome = D.BIOMES[site.biome] || D.BIOMES.temperate;
-    drawDigBackground(ctx, biome);
+    drawDigBackground(ctx, biome, site.biome, t);
     const L = computeDigLayout(site, board);
     const ts = L.ts;
-    // pit frame
+
+    // base camp on the surface, top-right (crates = your fossil storage)
+    const camp = A.camp[(t / 420 | 0) % 2];
+    const campX = VW - camp.width - 6, campY = HORIZON - camp.height + 4;
+    ctx.drawImage(A.shadows.s32, campX + camp.width / 2 - 16, HORIZON - 2);
+    ctx.drawImage(camp, campX, campY);
+    L.campRect = { x: campX - 2, y: campY - 2, w: camp.width + 4, h: camp.height + 4 };
+    // smoke wisps from the campfire
+    if (((t / 300) | 0) % 2 === 0) {
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#cbdbfc';
+      ctx.fillRect(campX + 31, campY + 14 - ((t / 160) % 8 | 0), 2, 2);
+      ctx.globalAlpha = 1;
+    }
+
+    // pit frame with rope-and-stake border
     ctx.fillStyle = biome.edge; ctx.fillRect(L.bx - 3, L.by - 3, L.boardW + 6, L.boardH + 6);
     ctx.fillStyle = biome.soil[2]; ctx.fillRect(L.bx - 2, L.by - 2, L.boardW + 4, L.boardH + 4);
+    ctx.fillStyle = C.gold;
+    ctx.fillRect(L.bx - 3, L.by - 4, L.boardW + 6, 1);
+    for (let sx = L.bx - 2; sx < L.bx + L.boardW; sx += 26) { ctx.fillStyle = C.brown; ctx.fillRect(sx, L.by - 6, 2, 4); }
 
     for (let y = 0; y < L.rows; y++) for (let x = 0; x < L.cols; x++) {
       const cell = board.cells[y * L.cols + x];

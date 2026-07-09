@@ -29,7 +29,7 @@
       staff: { janitor: 0, guide: 0, curator: 0 },
       quests: { progress: {}, done: {} },
       tutorial: { step: 0, done: false },
-      stats: { digs: 0, extracted: 0, cleared: 0, mounted: 0, visitorsPeak: 0, deepest: 1, trashCleaned: 0, vipServed: 0 },
+      stats: { digs: 0, extracted: 0, cleared: 0, mounted: 0, visitorsPeak: 0, deepest: 1, trashCleaned: 0, vipServed: 0, crushed: 0 },
       level: 1, xp: 0, lastSeen: nowMs(), muted: false, firstRun: true,
     };
   }
@@ -84,7 +84,7 @@
       state.quests = state.quests || { progress: {}, done: {} };
       state.quests.progress = state.quests.progress || {}; state.quests.done = state.quests.done || {};
       state.tutorial = state.tutorial || { step: 0, done: false };
-      state.stats = Object.assign({ digs: 0, extracted: 0, cleared: 0, mounted: 0, visitorsPeak: 0, deepest: 1, trashCleaned: 0, vipServed: 0 }, state.stats || {});
+      state.stats = Object.assign({ digs: 0, extracted: 0, cleared: 0, mounted: 0, visitorsPeak: 0, deepest: 1, trashCleaned: 0, vipServed: 0, crushed: 0 }, state.stats || {});
       const want = U.storageSize();
       if (state.grid.size < want) resizeGrid(want);
       return true;

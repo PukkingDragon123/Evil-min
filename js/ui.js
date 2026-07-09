@@ -216,30 +216,48 @@
   // DIG overlay
   // =========================================================================
   function drawDigOverlay(ctx, t, app, board, site) {
-    panel(ctx, 4, HUD_H + 3, VW - 8, 22, 'rgba(27,25,48,0.9)');
     const biome = D.BIOMES[site.biome];
+    // compact site plaque, top-left
+    panel(ctx, 4, HUD_H + 3, 168, 24, 'rgba(27,25,48,0.88)', biome.accent);
     Font.drawText(ctx, site.name.toUpperCase(), 10, HUD_H + 6, C.cyan, { shadow: C.ink });
     const depth = window.Dig.depthOf(site);
-    ctx.fillStyle = biome.accent; ctx.fillRect(10, HUD_H + 15, 3, 7);
-    Font.drawText(ctx, 'DEPTH ' + depth + '  ' + biome.name, 16, HUD_H + 16, C.pale);
+    ctx.fillStyle = biome.accent; ctx.fillRect(10, HUD_H + 16, 3, 6);
+    Font.drawText(ctx, 'DEPTH ' + depth, 16, HUD_H + 16, C.pale);
     const left = window.Dig.nodesLeft(board);
-    Font.drawText(ctx, 'Treasures left: ' + left, 130, HUD_H + 6, C.yellow);
+    Font.drawText(ctx, left + ' buried', 168 - 4, HUD_H + 16, C.yellow, { align: 2 });
 
-    button(ctx, VW - 52, HUD_H + 5, 46, 8, 'SITES', { color: C.purple }, function () { Au.play('click'); app.openModal('sites'); });
+    // expedition map button
+    button(ctx, 4, HUD_H + 30, 80, 12, 'EXPEDITION', { color: C.purple }, function () {
+      Au.play('click'); app.screen = 'expedition'; app.expSelected = app.siteId;
+    });
+
+    // survey streak flame
+    if (app.streak >= 2) {
+      panel(ctx, 88, HUD_H + 30, 62, 12, 'rgba(90,50,20,0.85)', C.orange);
+      Font.drawText(ctx, 'STREAK x' + app.streak, 92, HUD_H + 33, C.yellow);
+    }
+
+    // camp: tap to open storage; shows crate count
+    if (app.digLayout && app.digLayout.campRect) {
+      const cr = app.digLayout.campRect;
+      const q = S.get().queue.length, cap = S.queueCap();
+      Font.drawText(ctx, q + '/' + cap, cr.x + cr.w - 8, cr.y - 4, q >= cap ? C.salmon : C.white, { align: 1, shadow: C.ink });
+      push(cr.x, cr.y, cr.w, cr.h, function () { Au.play('tab'); app.setTab('storage'); toast('Back at camp - pack your finds!', C.cyan); });
+    }
 
     if (window.Dig.isCleared(board)) {
-      button(ctx, VW - 154, HUD_H + 15, 148, 9, 'DIG DEEPER >>', { color: C.green }, function () {
+      button(ctx, 208, HUD_H + 6, 148, 13, 'DIG DEEPER >>', { color: C.green }, function () {
         const d = window.Dig.descend(site); Au.play('newarea'); emit('depth', d); FX.confetti(VW / 2, HUD_H + 40, 30); toast('Descending to depth ' + d + '!', C.lime);
       });
     } else {
-      // the little guide for the tap/hold controls
-      R.blit(ctx, A.icons.pick, 132, HUD_H + 18, 8, 1);
-      Font.drawText(ctx, 'TAP tile = survey     HOLD tile = send dig team', 140, HUD_H + 16, C.pale);
+      // control guide + crush warning (in the sky band, right of the plaque)
+      panel(ctx, 180, HUD_H + 6, 212, 11, 'rgba(20,18,31,0.66)');
+      Font.drawText(ctx, 'TAP = survey   HOLD = dig team   surveys CRUSH fossils!', 286, HUD_H + 9, C.pale, { align: 1 });
     }
 
     if (S.get().energy <= 0) {
-      panel(ctx, VW / 2 - 82, VH - TAB_H - 22, 164, 18, 'rgba(90,37,48,0.95)');
-      Font.drawText(ctx, 'Out of energy! Refill or wait.', VW / 2, VH - TAB_H - 17, C.white, { align: 1 });
+      panel(ctx, VW / 2 - 82, HUD_H + 20, 164, 14, 'rgba(90,37,48,0.95)');
+      Font.drawText(ctx, 'Out of energy! Refill or wait.', VW / 2, HUD_H + 24, C.white, { align: 1 });
     }
   }
 
@@ -441,41 +459,108 @@
   }
   function countPlaced(id) { const st = S.get(); let n = 0; for (let fi = 0; fi < st.floors.length; fi++) { const m = st.floors[fi].museum; for (let i = 0; i < m.length; i++) if (m[i].id === id) n++; } return n; }
 
-  function drawSites(ctx, t, app) {
-    modalBackdrop(ctx, app);
-    const w = 400, h = 224, x = (VW - w) / 2, y = (VH - h) / 2;
-    panel(ctx, x, y, w, h, '#232038', C.gold);
-    Font.drawText(ctx, 'EXCAVATION SITES', x + w / 2, y + 6, C.cyan, { align: 1, scale: 2, shadow: C.ink });
-    button(ctx, x + w - 16, y + 4, 12, 12, 'x', { color: C.red }, function () { Au.play('click'); app.closeModal(); });
-    const vx = x + 6, vy = y + 22, vw = w - 14, vh = h - 28;
-    ctx.save(); ctx.beginPath(); ctx.rect(vx, vy, vw, vh); ctx.clip();
-    const st = S.get(); const rowH = 48; let cy = vy - app.scrollY;
-    for (let i = 0; i < D.SITES.length; i++) { drawSiteRow(ctx, D.SITES[i], vx, cy, vw, rowH, app); cy += rowH + 4; }
-    ctx.restore();
-    scrollClip(ctx, app, vx, vy, vw, vh, D.SITES.length * (rowH + 4));
-  }
-  function drawSiteRow(ctx, site, x, y, w, h, app) {
-    if (y + h < HUD_H || y > VH) return;
-    const st = S.get(); const unlocked = !!st.sites[site.id]; const biome = D.BIOMES[site.biome];
-    panel(ctx, x, y, w, h, unlocked ? '#2b2740' : '#241f30', unlocked ? biome.accent : C.dkgray2);
-    ctx.fillStyle = biome.soil[1]; ctx.fillRect(x, y, 4, h);
-    Font.drawText(ctx, site.name, x + 10, y + 4, unlocked ? C.white : C.ltgray, { shadow: C.ink });
-    Font.drawText(ctx, biome.name + ' - ' + site.period, x + 10, y + 13, biome.accent);
-    Font.drawTextWrapped(ctx, site.desc, x + 10, y + 22, w - 110, unlocked ? C.pale : C.gray);
+  // =========================================================================
+  // EXPEDITION MAP (full-screen site picker)
+  // =========================================================================
+  // node positions along a winding trail across the map panel
+  const EXP_POS = [[48, 116], [116, 66], [186, 118], [252, 62], [318, 114], [386, 64], [446, 112]];
+
+  function drawExpedition(ctx, t, app) {
+    const st = S.get();
+    grad2(ctx, 0, 0, VW, VH, '#2b3350', '#161228');
+    Font.drawText(ctx, 'EXPEDITION MAP', VW / 2, 8, C.cyan, { align: 1, scale: 2, shadow: C.maroon });
+    button(ctx, 6, 5, 52, 14, '< BACK', { color: C.steel }, function () { Au.play('click'); app.screen = 'game'; });
+
+    // parchment map panel
+    const mx = 10, my = 26, mw = VW - 20, mh = 124;
+    panel(ctx, mx, my, mw, mh, '#e8d8b0', '#8a6f30');
+    ctx.fillStyle = '#d9c9a0'; // aged blotches
+    const rr = A.rng(31);
+    for (let i = 0; i < 12; i++) ctx.fillRect(mx + 4 + (rr() * (mw - 20)) | 0, my + 4 + (rr() * (mh - 12)) | 0, 8 + (rr() * 10) | 0, 4);
+    ctx.fillStyle = '#c9b890'; // torn corners
+    ctx.fillRect(mx, my, 5, 2); ctx.fillRect(mx, my, 2, 5);
+    ctx.fillRect(mx + mw - 5, my + mh - 2, 5, 2); ctx.fillRect(mx + mw - 2, my + mh - 5, 2, 5);
+    // compass rose
+    Font.drawText(ctx, 'N', mx + mw - 14, my + 6, '#8a6f30');
+    ctx.fillStyle = '#8a6f30'; ctx.fillRect(mx + mw - 12, my + 13, 1, 8); ctx.fillRect(mx + mw - 15, my + 16, 7, 1);
+
+    // dotted trail between nodes
+    ctx.fillStyle = '#8a6f30';
+    for (let i = 0; i < EXP_POS.length - 1; i++) {
+      const a = EXP_POS[i], b = EXP_POS[i + 1];
+      const steps = 9;
+      for (let s2 = 1; s2 < steps; s2++) {
+        const u = s2 / steps;
+        ctx.fillRect(Math.round(a[0] + (b[0] - a[0]) * u), Math.round(my - 26 + a[1] + (b[1] - a[1]) * u), 2, 2);
+      }
+    }
+
+    // site nodes (medallions)
+    if (!app.expSelected) app.expSelected = app.siteId;
+    for (let i = 0; i < D.SITES.length; i++) {
+      const site = D.SITES[i]; const biome = D.BIOMES[site.biome];
+      const nx = EXP_POS[i][0], ny = my - 26 + EXP_POS[i][1];
+      const unlocked = !!st.sites[site.id];
+      const selected = app.expSelected === site.id;
+      // medallion
+      ctx.fillStyle = '#5a4a28'; pixDisc2(ctx, nx, ny, 9);
+      ctx.fillStyle = unlocked ? biome.soil[1] : '#7a7264'; pixDisc2(ctx, nx, ny, 7);
+      ctx.fillStyle = unlocked ? biome.accent : '#9a9284'; pixDisc2(ctx, nx, ny, 3);
+      if (!unlocked) R.blit(ctx, A.icons.lock, nx, ny, 8, 1);
+      if (selected) {
+        const pr = 10 + Math.round((Math.sin(t / 200) * 0.5 + 0.5) * 2);
+        ctx.strokeStyle = C.white; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(nx, ny, pr, 0, Math.PI * 2); ctx.stroke();
+      }
+      if (app.siteId === site.id && unlocked) {
+        // your camp flag marks the active site
+        ctx.fillStyle = C.brown; ctx.fillRect(nx + 7, ny - 16, 1, 10);
+        ctx.fillStyle = C.red; ctx.fillRect(nx + 8, ny - 16, 5, 4);
+      }
+      Font.drawText(ctx, site.name.split(' ')[1] || site.name, nx, ny + 11, unlocked ? '#5a4a28' : '#9a9284', { align: 1 });
+      (function (id) { push(nx - 11, ny - 11, 22, 22, function () { Au.play('click'); app.expSelected = id; }); })(site.id);
+    }
+
+    // Doc studying the map
+    const mframe = A.mascot[(t / 450 | 0) % 2];
+    ctx.drawImage(mframe, 14, my + mh - mframe.height + 4);
+
+    // ---- detail card for the selected site ----
+    const sel = D.siteById(app.expSelected) || D.SITES[0];
+    const biome = D.BIOMES[sel.biome];
+    const unlocked = !!st.sites[sel.id];
+    const cy2 = my + mh + 6, ch2 = VH - cy2 - 8;
+    panel(ctx, 10, cy2, VW - 20, ch2, '#232038', unlocked ? biome.accent : C.dkgray2);
+    // vignette scene
+    const vg = A.vignettes[sel.biome];
+    if (vg) {
+      ctx.fillStyle = C.ink; ctx.fillRect(16, cy2 + 8, vg.width + 4, vg.height + 4);
+      if (unlocked) ctx.drawImage(vg, 18, cy2 + 10);
+      else { ctx.globalAlpha = 0.35; ctx.drawImage(vg, 18, cy2 + 10); ctx.globalAlpha = 1; R.blit(ctx, A.icons.lock, 18 + vg.width / 2, cy2 + 10 + vg.height / 2, 16); }
+    }
+    const tx = 124;
+    Font.drawText(ctx, sel.name.toUpperCase(), tx, cy2 + 9, unlocked ? C.white : C.ltgray, { scale: 2, shadow: C.ink });
+    Font.drawText(ctx, biome.name + ' biome  -  ' + sel.period, tx, cy2 + 24, biome.accent);
+    Font.drawTextWrapped(ctx, sel.desc, tx, cy2 + 35, VW - tx - 120, C.pale);
     if (unlocked) {
-      const d = st.depth[site.id] || 1, md = st.maxDepth[site.id] || 1;
-      Font.drawText(ctx, 'Depth ' + d + '  (best ' + md + ')', x + 10, y + h - 9, C.gold);
-      const active = app.siteId === site.id;
-      button(ctx, x + w - 78, y + 8, 70, 15, active ? 'DIGGING' : 'ENTER', { color: active ? C.green : C.steel, active: active }, function () { Au.play('tab'); app.siteId = site.id; app.closeModal(); app.setTab('dig'); });
-      button(ctx, x + w - 78, y + 26, 70, 13, 'RESET TO TOP', { color: C.dkgray2, enabled: d > 1 }, function () { window.Dig.resetToTop(site); Au.play('click'); toast('Back to depth 1', C.pale); });
-    } else {
-      const afford = S.canAfford(site.cost, 0);
-      button(ctx, x + w - 78, y + 10, 70, 16, 'UNLOCK', { color: afford ? C.orange : C.dkgray2, enabled: afford }, function () {
-        if (S.spend(site.cost, 0)) { st.sites[site.id] = true; S.saveSoon(); Au.play('newarea'); emit('unlockSite'); S.addXp(60); toast(site.name + ' unlocked!', C.lime); } else { Au.play('error'); toast('Need ' + fmt(site.cost) + ' coins', C.salmon); }
+      const d = st.depth[sel.id] || 1, md = st.maxDepth[sel.id] || 1;
+      Font.drawText(ctx, 'Current depth ' + d + '   Record ' + md, tx, cy2 + ch2 - 12, C.gold);
+      const active = app.siteId === sel.id;
+      button(ctx, VW - 110, cy2 + 10, 92, 20, active ? 'DIG HERE!' : 'TRAVEL', { color: C.green, scale: 1 }, function () {
+        Au.play('newarea'); app.siteId = sel.id; app.screen = 'game'; app.setTab('dig');
       });
-      costLabel(ctx, x + w - 78, y + 30, site.cost, 0, afford);
+      button(ctx, VW - 110, cy2 + 34, 92, 13, 'RESET TO TOP', { color: C.dkgray2, enabled: d > 1 }, function () { window.Dig.resetToTop(sel); Au.play('click'); toast('Back to depth 1', C.pale); });
+    } else {
+      const afford = S.canAfford(sel.cost, 0);
+      button(ctx, VW - 110, cy2 + 10, 92, 20, 'FUND DIG', { color: afford ? C.orange : C.dkgray2, enabled: afford }, function () {
+        if (S.spend(sel.cost, 0)) { st.sites[sel.id] = true; S.saveSoon(); Au.play('newarea'); emit('unlockSite'); S.addXp(60); FX.confetti(VW / 2, 80, 30); toast(sel.name + ' expedition funded!', C.lime); }
+        else { Au.play('error'); toast('Need ' + fmt(sel.cost) + ' coins', C.salmon); }
+      });
+      costLabel(ctx, VW - 106, cy2 + 34, sel.cost, 0, afford);
     }
   }
+  function grad2(ctx, x, y, w, h, c0, c1) { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, c0); g.addColorStop(1, c1); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); }
+  function pixDisc2(ctx, cx, cy, r) { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + r * 0.5) ctx.fillRect(cx + dx, cy + dy, 1, 1); }
 
   function drawUpgrades(ctx, t, app) {
     modalBackdrop(ctx, app);
@@ -666,6 +751,7 @@
       ['Floors owned', st.floors.filter(function (f) { return f.unlocked; }).length + ' / ' + D.FLOORS.length],
       ['Deepest dig', 'Depth ' + (st.stats.deepest || 1)],
       ['Fossils extracted', st.stats.extracted || 0],
+      ['Fossils crushed', st.stats.crushed || 0],
     ];
     for (let i = 0; i < rows.length; i++) {
       const ry = y + 20 + i * 13;
@@ -788,7 +874,7 @@
     reset: reset, push: push, handleTap: handleTap, toast: toast, tickToasts: tickToasts,
     drawHUD: drawHUD, drawTabs: drawTabs, drawMuseumOverlay: drawMuseumOverlay,
     drawDigOverlay: drawDigOverlay, drawStorageOverlay: drawStorageOverlay, drawShop: drawShop,
-    drawCollection: drawCollection, drawSites: drawSites, drawUpgrades: drawUpgrades,
+    drawCollection: drawCollection, drawExpedition: drawExpedition, drawUpgrades: drawUpgrades,
     drawStaff: drawStaff, drawQuests: drawQuests, drawTutorial: drawTutorial,
     drawMenu: drawMenu, ratingFor: ratingFor,
     drawIntro: drawIntro, drawOffline: drawOffline, drawToasts: drawToasts,

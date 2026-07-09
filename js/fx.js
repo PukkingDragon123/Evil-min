@@ -8,6 +8,7 @@
   let parts = [];
   let texts = [];
   let rings = [];
+  let flights = []; // sprites arcing from A to B (fossil crate -> camp)
   let shakeT = 0, shakeMag = 0;
   let flashT = 0, flashDur = 0, flashCol = '#ffffff';
 
@@ -47,6 +48,10 @@
   function ring(x, y, col, maxR) {
     rings.push({ x: x, y: y, r: 2, maxR: maxR || 16, life: 0, ttl: 380, col: col || '#ffffff' });
   }
+  // Send a small sprite arcing from (x0,y0) to (x1,y1); dust puff on landing.
+  function fly(x0, y0, x1, y1, img, ttl) {
+    flights.push({ x0: x0, y0: y0, x1: x1, y1: y1, img: img, life: 0, ttl: ttl || 620 });
+  }
   function shake(ms, mag) { shakeT = Math.max(shakeT, ms); shakeMag = Math.max(shakeMag, mag || 3); }
   function flash(ms, col) { flashT = ms; flashDur = ms; flashCol = col || '#ffffff'; }
 
@@ -63,6 +68,10 @@
     for (let i = rings.length - 1; i >= 0; i--) {
       const r = rings[i]; r.life += dt; r.r = 2 + (r.maxR - 2) * (r.life / r.ttl);
       if (r.life > r.ttl) rings.splice(i, 1);
+    }
+    for (let i = flights.length - 1; i >= 0; i--) {
+      const f = flights[i]; f.life += dt;
+      if (f.life >= f.ttl) { dust(f.x1, f.y1, '#d9a066', 5); flights.splice(i, 1); }
     }
     if (shakeT > 0) shakeT -= dt;
     if (flashT > 0) flashT -= dt;
@@ -85,6 +94,13 @@
       ctx.fillRect(Math.round(p.x), Math.round(p.y), p.sz, p.sz);
     }
     ctx.globalAlpha = 1;
+    // flights (arc with lift)
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i]; const u = Math.min(1, f.life / f.ttl);
+      const x = f.x0 + (f.x1 - f.x0) * u;
+      const y = f.y0 + (f.y1 - f.y0) * u - Math.sin(u * Math.PI) * 26;
+      if (f.img) ctx.drawImage(f.img, Math.round(x - f.img.width / 2), Math.round(y - f.img.height / 2));
+    }
     // floating text
     for (let i = 0; i < texts.length; i++) {
       const t = texts[i];
@@ -109,7 +125,7 @@
   }
 
   window.FX = {
-    burst: burst, confetti: confetti, dust: dust, floatText: floatText, ring: ring,
+    burst: burst, confetti: confetti, dust: dust, floatText: floatText, ring: ring, fly: fly,
     shake: shake, flash: flash, update: update, draw: draw, drawFlash: drawFlash, shakeOffset: shakeOffset,
   };
 })();

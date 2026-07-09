@@ -34,6 +34,7 @@
     shopCat: 'nature', activePiece: 0, collTab: 'fossils',
     invGhost: null, invLayout: null, digCursor: null, digLayout: null,
     hold: null, digAnims: [], offlineData: null,
+    streak: 0, expSelected: null,
 
     openMenu: function () { this.screen = 'menu'; this.menuView = 'main'; this.hold = null; this.modal = null; },
     enterGame: function () {
@@ -135,7 +136,7 @@
   // --- dig -----------------------------------------------------------------
   function cellWorld(L, cx, cy) { return { x: L.bx + cx * L.ts + L.ts / 2, y: L.by + cy * L.ts + L.ts / 2 }; }
 
-  // quick tap = survey (reveal clues)
+  // quick tap = survey (reveal clues). Surveying ONTO a fossil crushes it!
   function handleDigSurvey(cx, cy) {
     const st = S.get(); const site = D.siteById(app.siteId); const L = app.digLayout; if (!L) return;
     const b = Dig.getBoard(site); const c = b.cells[cy * b.cols + cx];
@@ -145,9 +146,52 @@
     S.useEnergy(1); st.stats.digs++; emit('survey');
     const res = Dig.survey(b, site, cx, cy);
     Au.play('dig'); FX.dust(w.x, w.y, biome.dust, 6);
-    if (res.hit) { extract(res.hit.node, res.hit.pristine, w.x, w.y, { x: cx, y: cy }); }
-    else { Au.play('reveal'); if (res.cascade > 2) FX.dust(w.x, w.y, biome.dust, 4); }
+    if (res.hit) {
+      const node = res.hit.node;
+      if (node.type === 'fossil' && !res.hit.pristine) {
+        crushFossil(node, w.x, w.y);
+      } else if (node.type === 'fossil') {
+        // Survey Kit rescued it (still chipped)
+        app.streak = 0;
+        UI.toast('Survey Kit saved it from the shovel!', C().cyan);
+        extract(node, false, w.x, w.y, { x: cx, y: cy });
+      } else {
+        app.streak = 0;
+        extract(node, res.hit.pristine, w.x, w.y, { x: cx, y: cy });
+      }
+    } else {
+      Au.play('reveal'); if (res.cascade > 2) FX.dust(w.x, w.y, biome.dust, 4);
+      bumpStreak(w.x, w.y);
+    }
     afterDig(b);
+  }
+
+  // careless survey straight onto a fossil: it shatters, and repairs cost coins
+  function crushFossil(node, wx, wy) {
+    const f = D.fossilById(node.fossilId); const rc = D.RARITY[f.rarity];
+    const penalty = Math.min(S.get().coins, D.RARITY[f.rarity].cell * 2);
+    S.addCoins(-penalty);
+    S.get().stats.crushed = (S.get().stats.crushed || 0) + 1;
+    app.streak = 0;
+    Au.play('hazard'); FX.shake(280, 4); FX.flash(180, '#ac3232');
+    FX.burst(wx, wy, '#ffffff', 12, { spMin: 20, spMax: 70 });
+    FX.burst(wx, wy, rc.color, 8);
+    FX.floatText(wx, wy - 8, 'CRUSHED! -' + penalty + 'c', C().salmon, { scale: 1 });
+    UI.toast('Crushed the ' + f.name + '! (-' + penalty + 'c) HOLD to dig instead!', C().salmon, window.Assets.pieces.skull);
+  }
+
+  // consecutive clean surveys build a streak; every 5 pays out
+  function bumpStreak(wx, wy) {
+    app.streak++;
+    if (app.streak > 0 && app.streak % 5 === 0) {
+      const depth = Dig.depthOf(D.siteById(app.siteId));
+      const bonus = 8 + depth * 6;
+      S.addCoins(bonus);
+      const st = S.get();
+      if (st.energy < S.energyMax()) st.energy++;
+      Au.play('coin');
+      FX.floatText(wx, wy - 10, 'STREAK x' + app.streak + '  +' + bonus + 'c +1 energy', C().yellow);
+    }
   }
 
   // press-and-hold (or right-click) = send a dig team to excavate
@@ -184,6 +228,11 @@
         emit('extract');
         Au.play(pristine ? 'find' : 'ore'); FX.floatText(wx, wy - 6, f.name, rc.color, { scale: 1 });
         FX.burst(wx, wy, rc.glow, 10); S.addXp(pristine ? 6 : 3);
+        // haul the find back to camp storage
+        if (app.digLayout && app.digLayout.campRect) {
+          const cr = app.digLayout.campRect;
+          FX.fly(wx, wy, cr.x + cr.w - 10, cr.y + cr.h - 8, window.Assets.icons.bone, 640);
+        }
         UI.toast(pristine ? 'Excavated ' + f.name + '!' : 'Chipped a ' + f.name, rc.color, window.Assets.pieces.skull);
       } else {
         Au.play('error'); UI.toast('Queue full! Block lost - upgrade Crate Truck', C().salmon);
@@ -318,6 +367,16 @@
       requestAnimationFrame(frame);
       return;
     }
+    // --- expedition map (idle sim keeps running underneath) ---
+    if (app.screen === 'expedition') {
+      S.tickEnergy(dt); window.Museum.update(dt);
+      UI.reset();
+      UI.drawExpedition(ctx, now, app);
+      FX.draw(ctx);
+      UI.drawToasts(ctx);
+      requestAnimationFrame(frame);
+      return;
+    }
 
     S.tickEnergy(dt); window.Museum.update(dt);
     for (let i = app.digAnims.length - 1; i >= 0; i--) { app.digAnims[i].life += dt; if (app.digAnims[i].life > app.digAnims[i].ttl) app.digAnims.splice(i, 1); }
@@ -359,7 +418,6 @@
     if (!app.modal) UI.drawTutorial(ctx, now, app);
 
     if (app.modal === 'collection') UI.drawCollection(ctx, now, app);
-    else if (app.modal === 'sites') UI.drawSites(ctx, now, app);
     else if (app.modal === 'upgrades') UI.drawUpgrades(ctx, now, app);
     else if (app.modal === 'staff') UI.drawStaff(ctx, now, app);
     else if (app.modal === 'quests') UI.drawQuests(ctx, now, app);

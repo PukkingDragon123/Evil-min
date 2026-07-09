@@ -1399,6 +1399,135 @@
     return p.canvas;
   }
 
+  // -------------------------------------------------------------------------
+  // Biome environment props (silhouettes/dressing for dig sites + expedition)
+  // -------------------------------------------------------------------------
+  function propCactus() {
+    const p = painter(12, 16);
+    p.rect(5, 2, 3, 14, C.green); p.rect(5, 2, 1, 14, C.lime);
+    p.rect(1, 5, 3, 2, C.green); p.rect(1, 5, 3, 6, C.green); p.rect(2, 4, 2, 2, C.green);
+    p.rect(9, 8, 3, 2, C.green); p.rect(9, 4, 2, 6, C.green);
+    p.px(6, 1, C.pink); p.px(2, 6, C.dkgreen); p.px(10, 6, C.dkgreen);
+    return p.canvas;
+  }
+  function propPine() {
+    const p = painter(12, 18);
+    p.rect(5, 13, 2, 5, C.brown);
+    for (let r = 0; r < 4; r++) { const w = 2 + r * 1.5, y = 2 + r * 3; for (let d = 0; d < 3; d++) p.rect(6 - (w + d) / 2, y + d, w + d, 1, d === 0 ? C.green : C.dkgreen); }
+    p.px(5, 1, C.lime);
+    return p.canvas;
+  }
+  function propIceSpike() {
+    const p = painter(10, 16);
+    for (let y = 0; y < 16; y++) { const w = Math.max(1, (y * 0.5) | 0); p.rect(5 - w / 2, y, w, 1, y % 3 ? C.pale : '#dcefff'); }
+    p.px(4, 2, C.white); p.px(3, 6, C.white);
+    return p.canvas;
+  }
+  function propVolcano() {
+    const p = painter(36, 20);
+    for (let y = 0; y < 20; y++) { const w = 6 + y * 1.5; p.rect(18 - w / 2, y, w, 1, y < 3 ? '#5a2224' : (y % 4 ? '#4a3a38' : '#3a2e2c')); }
+    p.rect(14, 0, 8, 2, '#df7126'); p.rect(16, 0, 4, 1, C.yellow);
+    p.curve([[17, 2], [15, 7], [16, 12]], '#df7126'); p.curve([[19, 2], [21, 8], [20, 14]], '#ac3232');
+    return p.canvas;
+  }
+  function propPalmBig() {
+    const p = painter(16, 22);
+    p.curve([[8, 21], [9, 14], [11, 8]], C.ltbrown, true);
+    p.curve([[11, 7], [4, 4], [1, 6]], C.dkgreen); p.curve([[11, 7], [16, 4], [15, 8]], C.dkgreen);
+    p.curve([[11, 7], [6, 1], [3, 1]], C.green); p.curve([[11, 7], [14, 1], [15, 2]], C.green);
+    p.px(10, 8, C.orange); p.px(12, 8, C.orange);
+    return p.canvas;
+  }
+  function propSeaweed() {
+    const p = painter(8, 14);
+    p.curve([[3, 13], [2, 9], [4, 5], [3, 1]], C.teal, true);
+    p.curve([[6, 13], [7, 9], [5, 6]], C.dkgreen);
+    p.px(3, 0, C.cyan);
+    return p.canvas;
+  }
+  function propCrystal() {
+    const p = painter(12, 14);
+    for (let y = 0; y < 12; y++) { const w = Math.max(1, 4 - Math.abs(y - 4)); p.rect(3 - w / 2 + 2, y + 2, w, 1, y % 2 ? C.purple : C.pink); }
+    for (let y = 0; y < 8; y++) { const w = Math.max(1, 3 - Math.abs(y - 3)); p.rect(8 - w / 2 + 1, y + 6, w, 1, y % 2 ? '#b869d6' : C.purple); }
+    p.px(4, 3, C.white); p.px(9, 8, C.white);
+    return p.canvas;
+  }
+  function propRock() {
+    const p = painter(12, 8);
+    p.disc(6, 7, 4, C.gray); p.rect(2, 5, 8, 3, C.gray);
+    p.px(4, 4, C.ltgray); p.px(8, 6, C.dkgray2);
+    return p.canvas;
+  }
+
+  // Base camp: striped tent + animated campfire + fossil crates + flag. 2 frames.
+  function campFrames() {
+    const frames = [];
+    for (let f = 0; f < 2; f++) {
+      const p = painter(52, 30);
+      // ground mat
+      p.g.globalAlpha = 0.3; p.rect(1, 26, 50, 3, C.ink); p.g.globalAlpha = 1;
+      // tent (apex 11,4 widening down)
+      for (let y = 0; y < 20; y++) {
+        const w = 1 + y * 0.85;
+        p.rect(11 - w, 5 + y, w * 2, 1, (y % 4 < 2) ? C.cream : C.salmon);
+      }
+      p.rect(11 - 17, 24, 34, 2, C.tan);
+      // door
+      for (let y = 0; y < 9; y++) { const w = 1 + y * 0.4; p.rect(11 - w, 16 + y, w * 2, 1, C.maroon); }
+      // pole + flag
+      p.rect(11, 0, 1, 5, C.brown);
+      p.rect(12, 0, 6, 3, f === 0 ? C.yellow : C.orange); p.px(18, 1, f === 0 ? C.orange : C.yellow);
+      // campfire
+      p.px(31, 24, C.brown); p.px(32, 25, C.brown); p.px(33, 24, C.brown); p.rect(30, 25, 6, 1, C.ltbrown);
+      if (f === 0) { p.px(32, 22, C.orange); p.px(33, 21, C.yellow); p.px(31, 21, C.red); p.px(32, 19, C.yellow); }
+      else { p.px(32, 21, C.yellow); p.px(31, 22, C.orange); p.px(33, 22, C.red); p.px(33, 19, C.orange); }
+      // crates (fossil storage)
+      p.rect(40, 18, 8, 8, C.tan); p.rect(40, 18, 8, 1, C.cream); p.rect(40, 25, 8, 1, C.ltbrown);
+      p.line(40, 18, 47, 25, C.ltbrown); p.line(47, 18, 40, 25, C.ltbrown);
+      p.rect(43, 10, 7, 7, C.tan); p.rect(43, 10, 7, 1, C.cream);
+      p.line(43, 10, 49, 16, C.ltbrown); p.line(49, 10, 43, 16, C.ltbrown);
+      p.px(45, 12, C.white); // bone peeking out
+      frames.push(p.canvas);
+    }
+    return frames;
+  }
+
+  // Mini biome scene vignette for the expedition map (w x h).
+  function vignette(biome, w, h) {
+    const p = painter(w, h);
+    const g = p.g;
+    // sky
+    const grd = g.createLinearGradient(0, 0, 0, h);
+    grd.addColorStop(0, biome.sky[0]); grd.addColorStop(1, biome.sky[1]);
+    g.fillStyle = grd; g.fillRect(0, 0, w, h);
+    const groundY = Math.round(h * 0.66);
+    // celestial + weather flavor
+    const key = biome.name;
+    if (key === 'Desert' || key === 'Temperate' || key === 'Jungle') {
+      p.disc(w - 14, 9, 5, C.yellow); p.disc(w - 14, 9, 3, '#fffab0');
+    } else if (key === 'Frozen' || key === 'Deep Strata') {
+      p.disc(w - 12, 8, 4, C.pale); p.disc(w - 14, 7, 3, biome.sky[0]);
+      p.px(10, 6, C.white); p.px(24, 12, C.white); p.px(w - 30, 5, C.white);
+    } else if (key === 'Volcanic') {
+      p.g.globalAlpha = 0.5; p.disc(w - 14, 10, 7, '#df7126'); p.g.globalAlpha = 1;
+    } else if (key === 'Seabed') {
+      p.g.globalAlpha = 0.25;
+      for (let i = 0; i < 3; i++) { g.fillStyle = '#bfeee6'; g.fillRect(10 + i * 22, 0, 3, groundY); }
+      p.g.globalAlpha = 1;
+      p.px(16, 8, C.white); p.px(40, 14, C.pale);
+    }
+    // distant ridge
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let x = 0; x < w; x += 2) { const rh = 4 + Math.round(Math.sin(x * 0.22) * 3 + Math.sin(x * 0.07) * 2); g.fillRect(x, groundY - rh, 2, rh); }
+    // ground
+    g.fillStyle = biome.soil[0]; g.fillRect(0, groundY, w, h - groundY);
+    g.fillStyle = biome.soil[1]; g.fillRect(0, groundY, w, 2);
+    g.fillStyle = biome.soil[2];
+    const rr = mulberry32(97);
+    for (let i = 0; i < 8; i++) p.px(2 + rr() * (w - 4), groundY + 3 + rr() * (h - groundY - 4), biome.soil[2]);
+    return { canvas: p.canvas, groundY: groundY, painter: p };
+  }
+
   function trashSprites() {
     const cup = sprite(['.RRRR.', 'RWWWWR', '.RRRR.', '.RRRR.', '.RRRR.', '..RR..'], { R: C.red, W: C.white });
     const paper = sprite(['.WW.W.', 'WWWWWW', 'WLWWLW', 'WWWWWW', '.WWWW.'], { W: C.pale, L: C.ltgray });
@@ -1603,6 +1732,34 @@
 
     A.mascot = mascotFrames();
     A.vip = vipFrames();
+    A.camp = campFrames();
+
+    // biome props: silhouette dressing for each site environment
+    A.props = {
+      temperate: [propPine(), propRock(), propPine()],
+      desert: [propCactus(), propRock(), propCactus()],
+      ice: [propIceSpike(), propIceSpike(), propRock()],
+      volcanic: [propVolcano(), propRock()],
+      marine: [propSeaweed(), propRock(), propSeaweed()],
+      jungle: [propPalmBig(), propPalmBig(), propRock()],
+      deep: [propCrystal(), propCrystal(), propRock()],
+    };
+
+    // pre-rendered expedition vignettes (scene + props composited)
+    A.vignettes = {};
+    if (window.GameData) {
+      for (const bk in window.GameData.BIOMES) {
+        const biome = window.GameData.BIOMES[bk];
+        const v = vignette(biome, 92, 52);
+        const props = A.props[bk] || [];
+        const slots = [10, 38, 66];
+        for (let i = 0; i < props.length && i < slots.length; i++) {
+          const pr = props[i];
+          v.painter.g.drawImage(pr, slots[i], v.groundY - pr.height + 3);
+        }
+        A.vignettes[bk] = v.canvas;
+      }
+    }
     A.staff = {
       janitor: personFrames(C.navy, C.teal, C.dkgray2, C.cream, 'broom'),
       guide: personFrames(C.red, C.salmon, C.navy, C.tan, 'flag'),
